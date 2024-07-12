@@ -30,7 +30,7 @@
 std::unique_ptr<PikiwiDB> g_pikiwidb;
 
 PikiwiDB::PikiwiDB() : io_threads_(pikiwidb::IOThreadPool::Instance()), port_(0),
-  ping_service_(std::make_unique<pikiwidb::PingService>()) { }
+  pkping_service_(std::make_unique<pikiwidb::PKPingService>()) { }
 
 PikiwiDB::~PikiwiDB() = default;
 
@@ -127,8 +127,8 @@ bool PikiwiDB::Init() {
   std::cout << logo;
 
     // Start PingService
-  ping_service_->AddHost("127.0.0.1", 8891);  // 添加你要ping的host和port
-  ping_service_->Start();
+  pkping_service_->AddHost("127.0.0.1", 8891, 1, 1);
+  pkping_service_->Start();
 
   return true;
 }
@@ -139,7 +139,7 @@ void PikiwiDB::Run() {
 }
 
 void PikiwiDB::Stop() {
-    ping_service_->Stop();
+    pkping_service_->Stop();
     io_threads_.Exit();
 }
 

@@ -9,7 +9,6 @@
 
 #include "common.h"
 #include "tcp_connection.h"
-#include "ping_service.h"
 
 #include <set>
 #include <unordered_map>
@@ -29,7 +28,6 @@ class PClient : public std::enable_shared_from_this<PClient> {
  public:
   PClient() = delete;
   explicit PClient(TcpConnection* obj);
-  ~PClient();
 
   int HandlePackets(pikiwidb::TcpConnection*, const char*, int);
 
@@ -110,13 +108,9 @@ class PClient : public std::enable_shared_from_this<PClient> {
   // auth
   bool auth_ = false;
   time_t last_auth_ = 0;
-  PingService ping_service_;
 
   static thread_local PClient* s_current;
 
-    void StopPingService();
-
-    void StartPingService();
 };
 
 }  // namespace pikiwidb

@@ -16,28 +16,26 @@ namespace pikiwidb {
 
     class PClient;
 
-    class PingService {
+    class PKPingService {
     public:
-        PingService();
+        PKPingService();
 
-        ~PingService();
+        ~PKPingService();
 
         void Start();
 
         void Stop();
 
-        void AddHost(const std::string &host, int port);
-
-        void SetClient(PClient *client);
+        void AddHost(const std::string &host, int port, int group_id, int term_id);
 
     private:
         void Run();
 
-        bool PingRedis(const std::string &host, int port);
+        bool PKPingRedis(const std::string &host, int port, int group_id, int term_id);
 
         std::atomic<bool> running_;
         std::thread thread_;
-        std::vector<std::pair<std::string, int>> hosts_;
+        std::vector<std::tuple<std::string, int, int, int>> hosts_;
         PClient *client_;
     };
 

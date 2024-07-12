@@ -5,7 +5,7 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#include "log.h"
+#include "std/log.h"
 
 #include <algorithm>
 
@@ -121,7 +121,7 @@ int PClient::handlePacketNew(pikiwidb::TcpConnection* obj, const std::vector<std
 
 PClient* PClient::Current() { return s_current; }
 
-PClient::PClient(TcpConnection* obj) : tcp_connection_(obj), flag_(0), name_("clientxxx"), ping_service_() {
+PClient::PClient(TcpConnection* obj) : tcp_connection_(obj), flag_(0), name_("clientxxx") {
   auth_ = false;
   reset();
 }
@@ -147,7 +147,6 @@ void PClient::OnConnect() {
     if (g_config.password.empty()) {
       SetAuth();
     }
-    StartPingService();
 }
 
 void PClient::Close() {
@@ -209,17 +208,4 @@ void PClient::FeedMonitors(const std::vector<std::string>& params) {
   }
 }
 
-PClient::~PClient() {
-  StopPingService();
-}
-
-void PClient::StopPingService() {
-  ping_service_.Stop();
-}
-
-void PClient::StartPingService() {
- ping_service_.SetClient(this);
- ping_service_.AddHost("127.0.0.1", 9221);  // Add the hosts you want to ping
- ping_service_.Start();
- }
 }  // namespace pikiwidb
