@@ -26,10 +26,12 @@
 #include "slow_log.h"
 
 #include "pikiwidb_logo.h"
+#include "ping_service.h"
 
 std::unique_ptr<PikiwiDB> g_pikiwidb;
 
-PikiwiDB::PikiwiDB() : io_threads_(pikiwidb::IOThreadPool::Instance()), port_(0) { }
+PikiwiDB::PikiwiDB() : io_threads_(pikiwidb::IOThreadPool::Instance()), port_(0),
+                       ping_service_(std::make_unique<pikiwidb::PingService>()){ }
 
 PikiwiDB::~PikiwiDB() = default;
 
@@ -124,7 +126,7 @@ bool PikiwiDB::Init() {
   snprintf(logo, sizeof logo - 1, pikiwidbLogo, PIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
            static_cast<int>(g_config.port));
   std::cout << logo;
-
+  ping_service_->Start();
   return true;
 }
 void PikiwiDB::Run() {
@@ -133,7 +135,10 @@ void PikiwiDB::Run() {
   INFO("server exit running");
 }
 
-void PikiwiDB::Stop() { io_threads_.Exit(); }
+void PikiwiDB::Stop() {
+  io_threads_.Exit();
+  ping_service_->Stop();
+}
 
 static void InitLogs() {
   logger::Init("logs/pikiwidb_server.log");

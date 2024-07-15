@@ -8,6 +8,7 @@
 #include "io_thread_pool.h"
 #include "event_loop.h"
 #include "net/tcp_connection.h"
+#include "ping_service.h"
 
 #define PIKIWIDB_VERSION "4.0.0"
 
@@ -32,6 +33,8 @@ class PikiwiDB final {
 
  private:
   pikiwidb::IOThreadPool& io_threads_;
+  // Add PingService member
+  std::unique_ptr<pikiwidb::PingService> ping_service_;
 };
 
 extern std::unique_ptr<PikiwiDB> g_pikiwidb;

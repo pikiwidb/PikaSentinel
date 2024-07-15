@@ -103,6 +103,7 @@ include(cmake/libevent.cmake)
 include(cmake/llhttp.cmake)
 include(cmake/spdlog.cmake)
 include(cmake/fmt.cmake)
+include(cmake/etcd.cmake)
 
 
 ADD_SUBDIRECTORY(src/std)
