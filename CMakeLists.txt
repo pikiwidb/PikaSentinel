@@ -2,7 +2,6 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.14)
 PROJECT(PikiwiDB)
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -g -D'GIT_COMMIT_ID=\"${GIT_COMMIT_ID}\"'")
-
 # Avoid warning about DOWNLOAD_EXTRACT_TIMESTAMP in CMake 3.24:
 IF (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
     CMAKE_POLICY(SET CMP0135 NEW)
@@ -103,7 +102,8 @@ include(cmake/libevent.cmake)
 include(cmake/llhttp.cmake)
 include(cmake/spdlog.cmake)
 include(cmake/fmt.cmake)
-include(cmake/etcd.cmake)
+include(cmake/json.cmake)
+include(cmake/nghttp2.cmake)
 
 
 ADD_SUBDIRECTORY(src/std)

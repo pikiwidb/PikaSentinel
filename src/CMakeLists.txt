@@ -10,8 +10,6 @@ SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 TARGET_INCLUDE_DIRECTORIES(pikiwidb PRIVATE
         ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/src/net
-        ${etcd_SOURCE_DIR}/
         )
-
-TARGET_LINK_LIBRARIES(pikiwidb libnet; dl ; fmt; etcd-cpp-api)
+TARGET_LINK_LIBRARIES(pikiwidb libnet; dl ; fmt; nlohmann_json::nlohmann_json; nghttp2::nghttp2)
 SET_TARGET_PROPERTIES(pikiwidb PROPERTIES LINKER_LANGUAGE CXX)
