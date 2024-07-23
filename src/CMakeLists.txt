@@ -27,5 +27,5 @@ ADD_EXECUTABLE(pikiwidb ${PIKIWIDB_SRC}
         sentinel_service.h
         sentinel_service.cc)
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
-TARGET_LINK_LIBRARIES(pikiwidb libnet; dl ; fmt; ${AWSSDK_LINK_LIBRARIES}; jsoncpp_lib)
+TARGET_LINK_LIBRARIES(pikiwidb libnet; dl ; fmt; jsoncpp_lib)
 SET_TARGET_PROPERTIES(pikiwidb PROPERTIES LINKER_LANGUAGE CXX)

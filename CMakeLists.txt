@@ -104,7 +104,6 @@ include(cmake/llhttp.cmake)
 include(cmake/spdlog.cmake)
 include(cmake/fmt.cmake)
 include(cmake/json.cmake)
-include(cmake/aws.cmake)
 
 
 ADD_SUBDIRECTORY(src/std)
