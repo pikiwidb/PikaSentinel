@@ -103,7 +103,6 @@ include(cmake/llhttp.cmake)
 include(cmake/spdlog.cmake)
 include(cmake/fmt.cmake)
 include(cmake/json.cmake)
-include(cmake/nghttp2.cmake)
 
 
 ADD_SUBDIRECTORY(src/std)

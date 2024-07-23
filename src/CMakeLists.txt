@@ -7,9 +7,16 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/net)
 ADD_EXECUTABLE(pikiwidb ${PIKIWIDB_SRC})
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 
+
+set(CURL_LIBRARY "-lcurl")
+find_package(CURL REQUIRED)
+
+
+include_directories(${CURL_INCLUDE_DIR})
+target_link_libraries(pikiwidb ${CURL_LIBRARIES})
 TARGET_INCLUDE_DIRECTORIES(pikiwidb PRIVATE
         ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/src/net
         )
-TARGET_LINK_LIBRARIES(pikiwidb libnet; dl ; fmt; nlohmann_json::nlohmann_json; nghttp2::nghttp2)
+TARGET_LINK_LIBRARIES(pikiwidb libnet; dl ; fmt; nlohmann_json::nlohmann_json)
 SET_TARGET_PROPERTIES(pikiwidb PROPERTIES LINKER_LANGUAGE CXX)
