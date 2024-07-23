@@ -18,23 +18,11 @@
 #include <aws/core/auth/AWSCredentials.h>
 #include <aws/core/utils/memory/stl/AWSStringStream.h>
 
-struct InfoSlave {
-    std::string ip;
-    std::string port;
-    std::string state;
-    std::string offset;
-};
-
-struct InfoReplication {
-    std::map<std::string, std::string> info;
-    std::vector<InfoSlave> slaves;
-};
-
-InfoReplication parseInfoReplication(const std::string& text) {
-    InfoReplication infoReplication;
+pikiwidb::InfoReplication parseInfoReplication(const std::string& text) {
+    pikiwidb::InfoReplication infoReplication;
     std::map<std::string, std::string> info;
     std::vector<std::map<std::string, std::string>> slaveMap;
-    std::vector<InfoSlave> slaves;
+    std::vector<pikiwidb::InfoSlave> slaves;
 
     std::regex slavePattern("slave[0-9]+");
     std::istringstream stream(text);
@@ -108,36 +96,18 @@ InfoReplication parseInfoReplication(const std::string& text) {
             std::cerr << "Unmarshal to slaves failed, " << errs << std::endl;
         } else {
             for (const auto& slave : slavesRoot) {
-                InfoSlave infoSlave;
+                pikiwidb::InfoSlave infoSlave;
                 infoSlave.ip = slave["ip"].asString();
-                infoSlave.port = slave["port"].asString();
-                infoSlave.state = slave["state"].asString();
-                infoSlave.offset = slave["offset"].asString();
+                infoSlave.port = std::stoi(slave["port"].asString());  // 将字符串转换为整数
+                infoSlave.state = std::stoi(slave["state"].asString());  // 将字符串转换为整数
+                infoSlave.offset = std::stoi(slave["offset"].asString());  // 将字符串转换为整数
                 slaves.push_back(infoSlave);
             }
         }
     }
 
-    Json::Value infoJson;
-    for (const auto& [k, v] : info) {
-        infoJson[k] = v;
-    }
-
-    Json::StreamWriterBuilder writer;
-    std::string infoStr = Json::writeString(writer, infoJson);
-
-    Json::CharReaderBuilder reader;
-    Json::Value infoRoot;
-    std::string errs;
-    std::istringstream s(infoStr);
-    if (!Json::parseFromStream(reader, s, &infoRoot, &errs)) {
-        std::cerr << "Unmarshal to infoReplication failed, " << errs << std::endl;
-    } else {
-        for (const auto& member : infoRoot.getMemberNames()) {
-            infoReplication.info[member] = infoRoot[member].asString();
-        }
-        infoReplication.slaves = slaves;
-    }
+    infoReplication.info = info;
+    infoReplication.slaves = slaves;
 
     return infoReplication;
 }
@@ -169,13 +139,13 @@ namespace pikiwidb {
     void PKPingService::Run() {
         while (running_) {
             for (const auto& [host, port, group_id, term_id] : hosts_) {
-                bool result = PKPingRedis(host, port, group_id, term_id);
+                std::string msg;
+                PKPingRedis(host, port, group_id, term_id, msg);
                 if (client_) {
                     client_->GetTcpConnection()->SendPacket(msg.data(), msg.size());
 
                     // Call parseInfoReplication after PKPing and send the parsed result
-                    std::string pkpingResult;
-                    InfoReplication infoReplication = parseInfoReplication(pkpingResult);
+                    InfoReplication infoReplication = parseInfoReplication(msg);
 
                     // Convert infoReplication to a JSON string
                     Json::StreamWriterBuilder writer;
@@ -202,11 +172,11 @@ namespace pikiwidb {
         }
     }
 
-    bool PKPingService::PKPingRedis(const std::string& host, int port, int group_id, int term_id) {
+    std::string PKPingService::PKPingRedis(const std::string& host, int port, int group_id, int term_id, const std::string& msg) {
         int sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) {
             std::cerr << "Socket creation error" << std::endl;
-            return false;
+            return "";
         }
 
         struct sockaddr_in serv_addr;
@@ -218,38 +188,85 @@ namespace pikiwidb {
         if (inet_pton(AF_INET, host.c_str(), &serv_addr.sin_addr) <= 0) {
             std::cerr << "Invalid address/ Address not supported" << std::endl;
             close(sock);
-            return false;
+            return "";
         }
 
         if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
             std::cerr << "Connection Failed" << std::endl;
             close(sock);
-            return false;
+            return "";
         }
 
         // Prepare PKPing command with necessary parameters
         std::string pkping_cmd = "*4\r\n$6\r\nPKPING\r\n";
         pkping_cmd += "$" + std::to_string(std::to_string(group_id).length()) + "\r\n" + std::to_string(group_id) + "\r\n";
         pkping_cmd += "$" + std::to_string(std::to_string(term_id).length()) + "\r\n" + std::to_string(term_id) + "\r\n";
+        pkping_cmd += "$" + std::to_string(msg.length()) + "\r\n" + msg + "\r\n";
 
-        send(sock, pkping_cmd.c_str(), pkping_cmd.size(), 0);
-
-        char reply[128];
-        ssize_t reply_length = read(sock, reply, 128);
-        std::string reply_str(reply, reply_length);
+        // Send PKPING command and get the reply
+        std::string reply = sendRedisCommand(sock, pkping_cmd);
 
         close(sock);
 
-        bool success = reply_str.find("+PONG") != std::string::npos;
+        pikiwidb::InfoReplication json_info = parseInfoReplication(reply);
 
         // Log the result
-        if (success) {
+        if (reply.find("+PONG") != std::string::npos) {
             std::cout << "PKPing to " << host << ":" << port << " succeeded." << std::endl;
         } else {
             std::cout << "PKPing to " << host << ":" << port << " failed." << std::endl;
         }
 
-        return success;
+        return json_info.toStyledString();
+    }
+    std::string PKPingService::sendRedisCommand(int sock, const std::string& command) {
+        send(sock, command.c_str(), command.size(), 0);
+
+        std::vector<char> buffer(4096);
+        ssize_t length = read(sock, buffer.data(), buffer.size() - 1);
+        buffer[length] = '\0';
+
+        return std::string(buffer.data(), length);
+    }
+
+
+    InfoReplication parseInfoReplication(const std::string& info) {
+        std::istringstream stream(info);
+        std::string line;
+        InfoReplication replication;
+
+        while (std::getline(stream, line)) {
+            if (line.empty() || line[0] == '#') {
+                continue;
+            }
+
+            std::size_t colon_pos = line.find(':');
+            if (colon_pos != std::string::npos) {
+                std::string key = line.substr(0, colon_pos);
+                std::string value = line.substr(colon_pos + 1);
+
+                if (key.find("slave") == 0) {
+                    std::istringstream value_stream(value);
+                    std::string token;
+                    InfoSlave slave;
+                    int field = 0;
+                    while (std::getline(value_stream, token, ',')) {
+                        switch (field) {
+                            case 0: slave.ip = token; break;
+                            case 1: slave.port = std::stoi(token); break;
+                            case 2: slave.state = std::stoi(token); break;
+                            case 3: slave.offset = std::stoi(token); break; // 假设 offset 是第4个字段
+                        }
+                        ++field;
+                    }
+                    replication.slaves.push_back(slave);
+                } else {
+                    replication.info[key] = value;
+                }
+            }
+        }
+
+        return replication;
     }
 
     struct UploadRequest {
@@ -262,20 +279,20 @@ namespace pikiwidb {
 
     class ApiServer {
     public:
-        void handle_upload_manifest_to_s3(http_request request);
+        //void handle_upload_manifest_to_s3(http_request request);
 
     private:
         void upload_manifest_to_s3(int group_id, int term_id, const std::string& s3_bucket,
                                    const std::string& s3_path, const std::string& content);
-        json::value api_response_error(const std::string& message);
-        json::value api_response_json(const std::string& message);
+        Json::Value api_response_error(const std::string& message);
+        Json::Value api_response_json(const std::string& message);
     };
 
-    void ApiServer::handle_upload_manifest_to_s3(http_request request) {
+    /*void ApiServer::handle_upload_manifest_to_s3(http_request request) {
         request.extract_string().then([this](std::string body) {
             UploadRequest uploadReq;
             std::istringstream ss(body);
-            json::value jsonValue;
+            Json::Value jsonValue;
             ss >> jsonValue;
 
             try {
@@ -341,19 +358,19 @@ namespace pikiwidb {
             return "Group-[" + std::to_string(gid) + "] not exists";
         }
         return "Upload manifest success";
-    }
+    }*/
 
-    json::value ApiServer::api_response_error(const std::string& message) {
-        json::value response;
+    /*json::value ApiServer::api_response_error(const std::string& message) {
+        Json::Value response;
         response[U("error")] = json::value::string(message);
         return response;
     }
 
-    json::value ApiServer::api_response_json(const std::string& message) {
-        json::value response;
+    Json::Value ApiServer::api_response_json(const std::string& message) {
+        Json::Value response;
         response[U("message")] = json::value::string(message);
         return response;
-    }
+    }*/
 
     class Topom {
     public:
@@ -377,12 +394,12 @@ namespace pikiwidb {
             // Return your cloud bucket region
         }
 
-        struct Context {
-            std::map<int, Group> group;
-        };
-
         struct Group {
             int TermId;
+        };
+
+        struct Context {
+            std::map<int, Group> group;
         };
 
         Context newContext() {
