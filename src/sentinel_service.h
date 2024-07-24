@@ -50,7 +50,7 @@ struct InfoSlave {
 struct InfoReplication {
   std::string role;
   int connected_slaves;
-  std::string maste_host;
+  std::string master_host;
   std::string master_port;
   std::string master_link_status;
   uint64_t db_binlog_filenum;
@@ -81,7 +81,7 @@ struct ReplicationState  {
   std::string addr;
   GroupServer* server;
   InfoReplication replication;
-  bool err = false;
+  bool err;
 };
 
 struct Promoting {
@@ -126,7 +126,7 @@ class SentinelService {
 
  private:
   void Run();
-  void PKPingRedis(std::string& addr, nlohmann::json jsondata);
+  void PKPingRedis(std::string& addr, nlohmann::json jsondata, ReplicationState* state);
   bool Slaveof(const std::string& addr, std::string& newMasterAddr);
   bool Slavenoone(const std::string& addr);
 
@@ -138,6 +138,7 @@ class SentinelService {
   std::vector<ReplicationState*> recovered_groups_; // 保存重新上线节点的元信息
   std::vector<ReplicationState*> states_; // 保存 pkping 命令状态值的返回信息
   GroupServer* newMasterServer_; // 新的主节点
+  std::mutex groups_mtx_; // 用来保护 groups_ 的信息
 };
 
 }  // namespace pikiwidb

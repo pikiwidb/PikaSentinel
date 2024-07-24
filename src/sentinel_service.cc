@@ -32,6 +32,66 @@ void SentinelService::Stop() {
   }
 }
 
+std::string Trim(const std::string &str) {
+  size_t first = str.find_first_not_of(' ');
+  if (first == std::string::npos) return "";
+  size_t last = str.find_last_not_of(' ');
+  return str.substr(first, last - first + 1);
+}
+
+InfoReplication ParseReplicationInfo(const std::string &data) {
+  std::istringstream iss(data);
+  std::string line;
+  InfoReplication replicationInfo;
+  std::unordered_map<std::string, InfoSlave> slaveMap;
+
+  while (std::getline(iss, line)) {
+    line = Trim(line);
+    if (line.empty() || line[0] == '#') continue;
+
+    auto delimiterPos = line.find(':');
+    if (delimiterPos == std::string::npos) continue;
+
+    std::string key = Trim(line.substr(0, delimiterPos));
+    std::string value = Trim(line.substr(delimiterPos + 1));
+
+    if (key == "role") {
+      replicationInfo.role = value;
+    } else if (key == "connected_slaves") {
+      replicationInfo.connected_slaves = std::stoi(value);
+    } else if (key == "master_host") {
+      replicationInfo.master_host = value;
+    } else if (key == "master_port") {
+      replicationInfo.master_port = value;
+    } else if (key == "master_link_status") {
+      replicationInfo.master_link_status = value;
+    } else if (key.find("slave") == 0 && key.find("ip=") != std::string::npos) {
+      InfoSlave slave;
+      auto ipPos = value.find("ip=");
+      auto portPos = value.find("port=");
+      auto lagPos = value.find("lag=");
+
+      if (ipPos != std::string::npos && portPos != std::string::npos && lagPos != std::string::npos) {
+        slave.ip = value.substr(ipPos + 3, portPos - ipPos - 4);
+        slave.port = value.substr(portPos + 5, lagPos - portPos - 6);
+        slave.lag = std::stoi(value.substr(lagPos + 4));
+      }
+      slaveMap[key] = slave;
+    } else if (key.find("db0:binlog_offset") != std::string::npos) {
+      auto commaPos = value.find(',');
+      if (commaPos != std::string::npos) {
+        replicationInfo.db_binlog_filenum = std::stoull(value.substr(0, commaPos));
+        replicationInfo.db_binlog_offset = std::stoull(value.substr(commaPos + 1));
+      }
+    }
+  }
+
+  for (const auto &pair: slaveMap) {
+    replicationInfo.slaves.push_back(pair.second);
+  }
+  return replicationInfo;
+}
+
 // json 序列化函数
 void to_json(nlohmann::json& j, const Action& a) {
   j = nlohmann::json{{"index", a.index}, {"state", a.state}};
@@ -184,6 +244,7 @@ void SentinelService::HTTPServer() {
     try {
       nlohmann::json jsonData = nlohmann::json::parse(json_data);
       int index = jsonData.at("index").get<int>();
+      std::lock_guard<std::mutex> lock(groups_mtx_);
       if (index >= 0 && index < groups_.size()) {
         groups_.erase(groups_.begin() + index);
         res.set_content("Group deleted", "text/plain");
@@ -201,44 +262,43 @@ void SentinelService::HTTPServer() {
 
   // 用于处理 dashboard 发来的更新 group 信息的 HTTP 请求
   svr.Post("/update", [this](const httplib::Request &req, httplib::Response &res) {
-      auto json_data = req.body;
-      try {
-        nlohmann::json jsonData = nlohmann::json::parse(json_data);
-        int id = jsonData.at("id").get<int>();
-
-        auto it = std::find_if(groups_.begin(), groups_.end(), [id](Group* group) {
-          return group->id == id;
-        });
-
-        if (it != groups_.end()) {
-          Group* group = *it;
-          group->out_of_sync = jsonData.at("out_of_sync").get<bool>();
-          group->term_id = jsonData.at("term_id").get<int>();
-          group->promoting = jsonData.at("promoting").get<Promoting>();
-
-          // 清空原有的 server 信息
-          for (auto server : group->servers) {
-            delete server;
-          }
-          group->servers.clear();
-
-          // 更新 servers 信息
-          for (const auto& server_json : jsonData.at("servers")) {
-            auto server = new GroupServer();
-            server_json.get_to(*server);
-            group->servers.push_back(server);
-          }
-          res.set_content("Group updated", "text/plain");
-        } else {
-          std::cerr << "Group with id " << id << " not found" << std::endl;
-          res.set_content("Group not found", "text/plain");
+    auto json_data = req.body;
+    try {
+      nlohmann::json jsonData = nlohmann::json::parse(json_data);
+      int id = jsonData.at("id").get<int>();
+      std::lock_guard<std::mutex> lock(groups_mtx_);
+      auto it = std::find_if(groups_.begin(), groups_.end(), [id](Group* group) {
+        return group->id == id;
+      });
+      Group* group = nullptr;
+      if (it != groups_.end()) {
+        group = *it;
+        for (auto server : group->servers) {
+          delete server;
         }
-      } catch (json::parse_error& e) {
-          std::cerr << "JSON parse error: " << e.what() << std::endl;
-      } catch (json::type_error& e) {
-          std::cerr << "JSON type error: " << e.what() << std::endl;
+        group->servers.clear();
+      } else {
+        group = new Group();
+        group->id = id;
+        groups_.push_back(group);
       }
-      res.set_content("Update received", "text/plain");
+      group->out_of_sync = jsonData.at("out_of_sync").get<bool>();
+      group->term_id = jsonData.at("term_id").get<int>();
+      group->promoting = jsonData.at("promoting").get<Promoting>();
+      // 更新 servers 信息
+      for (const auto& server_json : jsonData.at("servers")) {
+        auto server = new GroupServer();
+        server_json.get_to(*server);
+        group->servers.push_back(server);
+      }
+      res.set_content("Group updated", "text/plain");
+    } catch (json::parse_error& e) {
+      std::cerr << "JSON parse error: " << e.what() << std::endl;
+      res.set_content("JSON parse error", "text/plain");
+    } catch (json::type_error& e) {
+      std::cerr << "JSON type error: " << e.what() << std::endl;
+      res.set_content("JSON type error", "text/plain");
+    }
   });
   // HTTP-Server 监听 9225 端口
   std::cout << "Server listening on http://localhost:9225" << std::endl;
@@ -462,7 +522,7 @@ void SentinelService::TryFixReplicationRelationship(Group *group, GroupServer *s
     Slavenoone(state->addr);
   } else {
     // 如果掉线节点之前是从节点，在掉线期间没有新的主从关系产生，那么还是保持和原来的状态一致
-    if (GetMasterAddr(state->replication.maste_host, state->replication.master_port) == curMasterAddr) {
+    if (GetMasterAddr(state->replication.master_host, state->replication.master_port) == curMasterAddr) {
       return;
     }
     // 如果掉线节点之前是从节点，在掉线期间有新的主从关系产生，那么需要重新 slaveof 新的主节点
@@ -492,10 +552,18 @@ void SentinelService::TryFixReplicationRelationships(int masterOfflineGroups) {
 }
 
 void SentinelService::RefreshMastersAndSlavesClientWithPKPing() {
-  for (auto& group: groups_) {
+  std::map<int, int> groups_info;
+  // 建立 gid 和 term-id 的映射关系
+  for (auto& group : groups_) {
+    groups_info[group->id] = group->term_id;
+  }
+  // 因为在同一个 Group 里面的节点，向它们发送的 group_info 肯定是一样的，所以用 map 存储
+  std::map<int, GroupInfo> groups_parameter;
+  // 组装 PkPing 命令的 GroupInfo 信息
+  for (auto& group : groups_) {
     GroupInfo group_info;
     group_info.groupid = group->id;
-    group_info.termid = group->term_id;
+    group_info.termid = groups_info[group->id];
     for (auto &server: group->servers) {
       if (server->role == GroupServerRoleStrings::Master) {
         group_info.masteraddr.push_back(server->addr);
@@ -504,18 +572,26 @@ void SentinelService::RefreshMastersAndSlavesClientWithPKPing() {
         group_info.slaveaddr.push_back(server->addr);
       }
     }
-    for (auto &server: group->servers) {
-      nlohmann::json json_groupInfo = group_info;
-      PKPingRedis(server->addr, json_groupInfo);
+    groups_parameter[group->id] = group_info;
+  }
+  for (auto& group : groups_) {
+    nlohmann::json json_groupInfo = groups_parameter[group->id];
+    for (int index = 0; index < group->servers.size(); ++index) {
+      auto state = new ReplicationState();
+      state->addr = group->servers[index]->addr;
+      state->server = group->servers[index];
+      state->group_id = group->id;
+      state->err = false;
+      state->index = index;
+      // 发送 PkPing 命令给目标节点
+      PKPingRedis(group->servers[index]->addr, json_groupInfo, state);
     }
   }
 }
 
 void SentinelService::CheckMastersAndSlavesState() {
-  // to do @chejinge
-  // 发送 PKPing 命令进行探活
-  // RefreshMastersAndSlavesClientWithPKPing();
-
+  // 探活发送 PkPing 命令
+  RefreshMastersAndSlavesClientWithPKPing();
   // 对每一个节点的状态值进行遍历，查看是否存活
   for (auto& state : states_) {
     auto group = GetGroup(state->group_id);
@@ -552,8 +628,8 @@ void SentinelService::Run() {
   server_thread.join();
 }
 
-// Pkping 命令
-void SentinelService::PKPingRedis(std::string& addr, nlohmann::json jsondata) {
+// PKPing 命令
+void SentinelService::PKPingRedis(std::string& addr, nlohmann::json jsondata, ReplicationState* state) {
   auto host = DeCodeIp(addr);
   auto port = DeCodePort(addr);
   int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -589,6 +665,13 @@ void SentinelService::PKPingRedis(std::string& addr, nlohmann::json jsondata) {
 
   close(sock);
   std::cout << "reply: " << reply_str << std::endl;
+  if (reply_str.find("Replication") != std::string::npos) {
+    state->err = false;
+  } else {
+    state->err = true;
+  }
+  state->replication = ParseReplicationInfo(reply_str);
+  states_.emplace_back(state);
 }
 
 // slaveof 命令
