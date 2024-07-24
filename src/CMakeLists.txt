@@ -6,17 +6,13 @@ INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/net)
 
 ADD_EXECUTABLE(pikiwidb ${PIKIWIDB_SRC})
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+SET(CURL_LIBRARY "-lcurl")
 
+FIND_PACKAGE(CURL REQUIRED)
 
-set(CURL_LIBRARY "-lcurl")
-find_package(CURL REQUIRED)
-
-
-include_directories(${CURL_INCLUDE_DIR})
-target_link_libraries(pikiwidb ${CURL_LIBRARIES})
 TARGET_INCLUDE_DIRECTORIES(pikiwidb PRIVATE
         ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/src/net
         )
-TARGET_LINK_LIBRARIES(pikiwidb libnet; dl ; fmt; nlohmann_json::nlohmann_json)
+TARGET_LINK_LIBRARIES(pikiwidb libnet; dl ; fmt; nlohmann_json::nlohmann_json; ${CURL_LIBRARIES})
 SET_TARGET_PROPERTIES(pikiwidb PROPERTIES LINKER_LANGUAGE CXX)

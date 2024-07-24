@@ -169,7 +169,7 @@ int SentinelService::DeCodePort(const std::string& serveraddr) {
   return -1;
 }
 
-// HTTP GEt 回调函数，用于处理响应数据
+// HTTP GET 回调函数，用于处理响应数据
 size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
   ((std::string*)userp)->append((char*)contents, size * nmemb);
   return size * nmemb;
