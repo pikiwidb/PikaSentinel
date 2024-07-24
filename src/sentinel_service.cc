@@ -32,7 +32,7 @@ void SentinelService::Stop() {
   }
 }
 
-// 序列化函数
+// json 序列化函数
 void to_json(nlohmann::json& j, const Action& a) {
   j = nlohmann::json{{"index", a.index}, {"state", a.state}};
 }
@@ -87,6 +87,7 @@ void to_json(nlohmann::json& j, const GroupInfo& g) {
   };
 }
 
+// json 反序列化函数
 void from_json(const json& j, Action& a) {
   if (j.contains("index")) {
     j.at("index").get_to(a.index);
@@ -142,6 +143,7 @@ void from_json(const nlohmann::json& j, GroupInfo& g) {
   j.at("slaveaddr").get_to(g.slaveaddr);
 }
 
+// 根据 addr 地址提取出 ip
 std::string SentinelService::DeCodeIp(const std::string& serveraddr) {
   size_t pos = serveraddr.find(':');
   if (pos != std::string::npos) {
@@ -150,6 +152,7 @@ std::string SentinelService::DeCodeIp(const std::string& serveraddr) {
   return serveraddr;
 }
 
+// 根据 addr 地址提取出 port
 int SentinelService::DeCodePort(const std::string& serveraddr) {
   size_t pos = serveraddr.find(':');
   if (pos != std::string::npos) {
@@ -166,12 +169,13 @@ int SentinelService::DeCodePort(const std::string& serveraddr) {
   return -1;
 }
 
-// 回调函数，用于处理响应数据
+// HTTP GEt 回调函数，用于处理响应数据
 size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
   ((std::string*)userp)->append((char*)contents, size * nmemb);
   return size * nmemb;
 }
 
+// HTTP Server 端
 void SentinelService::HTTPServer() {
   httplib::Server svr;
   // 用于处理 dashboard 发来的删除一个 group 的 HTTP 请求
@@ -241,6 +245,7 @@ void SentinelService::HTTPServer() {
   svr.listen("0.0.0.0", 9225);
 }
 
+// HTTP 客户端
 void SentinelService::HTTPClient() {
   CURL* curl;
   CURLcode res;
@@ -257,9 +262,10 @@ void SentinelService::HTTPClient() {
     if (res != CURLE_OK) {
       std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
     } else {
+      // 获取到从 dashboard 拿到的数据装载到 readbuffer 中
       std::cout << "Response Data: " << readBuffer << std::endl;
     }
-    // 解析从 dashboard 获取的 JSON 数据, 填充本地的元信息到 groups_ 中
+    // 解析从 dashboard 获取的 JSON 数据, 填充元信息到 groups_ 中
     try {
       json jsonData = json::parse(readBuffer);
       for (const auto& item : jsonData) {
@@ -285,29 +291,38 @@ Group* SentinelService::GetGroup(int gid) {
   return groups_[gid];
 }
 
+/*
+ * 对 state 状态值进行判断, 更新 server 节点的信息
+ */
 void SentinelService::CheckAndUpdateGroupServerState(GroupServer* server, ReplicationState* state, Group* group) {
+  // 如果 err 值为 true，说明没有存活
   if (!state->err) {
-    // 节点主观下线
     if (server->state == static_cast<int8_t>(GroupState::GroupServerStateNormal)) {
+      // 节点主观下线
       server->state = static_cast<int8_t>(GroupState::GroupServerStateSubjectiveOffline);
     } else {
       server->recall_times++;
+      // 如果累加到 10 次还是未存活
       if (server->recall_times >= 10) {
-        // 节点客观下线
+        // 节点客观下线，更新元信息
         server->state = static_cast<int8_t>(GroupState::GroupServerStateOffline);
         server->action.state = ActionState::Nothing;
         server->replica_group = false;
       }
+      // 如果节点已经客观下线，并且节点是 master 节点，则放入 master_offline_groups 队列
       if (server->state == static_cast<int8_t>(GroupState::GroupServerStateOffline) && IsGroupMaster(state, group)) {
         master_offline_groups_.emplace_back(group);
       } else {
+        // 否则放入 slave_offline_groups 队列
         slave_offline_groups_.emplace_back(group);
       }
     }
   } else {
+    // 如果节点之前是客观下线状态，但是这次 pkping 是存活状态，说明节点重新上线了，放入 recover_groups 队列
     if (server->state == static_cast<int8_t>(GroupState::GroupServerStateOffline)) {
       recovered_groups_.emplace_back(state);
     } else {
+      // 探活正常，重置 server 节点的元信息
       server->state = static_cast<int8_t>(GroupState::GroupServerStateNormal);
       server->recall_times = 0;
       server->replica_group = true;
@@ -319,84 +334,79 @@ void SentinelService::CheckAndUpdateGroupServerState(GroupServer* server, Replic
   }
 }
 
+// 向 dashboard 发送 HTTP Post 请求变更 etcd 元信息
 void SentinelService::UpdateGroup(Group* group) {
   nlohmann::json json_group = group;
   curl_global_init(CURL_GLOBAL_ALL);
   CURL* curl = curl_easy_init();
-
   if (curl) {
-      // 要发送的JSON数据
-      std::string json_data = json_group.dump(4);
-
-      // 设置URL
-      curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.55.213:18080/topom/upload-meta-data");
-
-      // 设置POST数据
-      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data.c_str());
-
-      // 设置HTTP头，包括Content-Type: application/json
-      struct curl_slist* headers = nullptr;
-      headers = curl_slist_append(headers, "Content-Type: application/json");
-      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-      // 执行请求
-      CURLcode res = curl_easy_perform(curl);
-
-      // 检查请求结果
-      if(res != CURLE_OK) {
-          std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-      } else {
-          std::cout << "POST request sent successfully." << std::endl;
-      }
-      // 清理
-      curl_slist_free_all(headers);
-      curl_easy_cleanup(curl);
+    std::string json_data = json_group.dump(4);
+    curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.55.213:18080/topom/upload-meta-data");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data.c_str());
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+      std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+    } else {
+      std::cout << "POST request sent successfully." << std::endl;
+    }
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
   }
-  // 全局清理
   curl_global_cleanup();
 }
 
 void SentinelService::UpdateSlaveOfflineGroups() {
   for (auto& group : slave_offline_groups_) {
+    // 更新 group 中的 out_of_sync 值，向 dashboard 发送 HTTP Post 请求，变更 etcd 信息
     group->out_of_sync = true;
     UpdateGroup(group);
   }
 }
 
 void SentinelService::SelectNewMaster(Group* group, std::string& newMasterAddr, int newMasterIndex) {
+  // 通过 filnume 和 offset 判断哪个节点的数据最新，选取新的主节点
   for (int index = 0; index < group->servers.size(); ++index) {
     if (index == 0 || group->servers[index]->state != static_cast<int8_t>(GroupState::GroupServerStateNormal)) {
       continue;
     }
-    if (newMasterServer == nullptr) {
-      newMasterServer =  group->servers[index];
+    if (newMasterServer_ == nullptr) {
+      newMasterServer_ =  group->servers[index];
       newMasterIndex = index;
-    } else if (group->servers[index]->db_binlog_filenum > newMasterServer->db_binlog_filenum) {
-      newMasterServer = group->servers[index];
+    } else if (group->servers[index]->db_binlog_filenum > newMasterServer_->db_binlog_filenum) {
+      newMasterServer_ = group->servers[index];
       newMasterIndex = index;
-    } else if (group->servers[index]->db_binlog_filenum == newMasterServer->db_binlog_filenum) {
-      if (group->servers[index]->db_binlog_offset > newMasterServer->db_binlog_offset) {
-        newMasterServer = group->servers[index];
+    } else if (group->servers[index]->db_binlog_filenum == newMasterServer_->db_binlog_filenum) {
+      if (group->servers[index]->db_binlog_offset > newMasterServer_->db_binlog_offset) {
+        newMasterServer_ = group->servers[index];
         newMasterIndex = index;
       }
     }
   }
-  if (newMasterServer == nullptr) {
+  if (newMasterServer_ == nullptr) {
     newMasterAddr = "";
   }
-  newMasterAddr = newMasterServer->addr;
+  // 用 newMasterAddr 存取新的主节点的 addr
+  newMasterAddr = newMasterServer_->addr;
 }
 
 void SentinelService::DoSwitchGroupMaster(pikiwidb::Group *group, std::string& newMasterAddr, int newMasterIndex) {
   if (newMasterIndex <= 0 || newMasterAddr.empty()) {
     return;
   }
+  // 对新的主节点发送 slaveof no one 命令，并且变更其元信息
   Slavenoone(newMasterAddr);
   group->servers[newMasterIndex]->role = GroupServerRoleStrings::Master;
   group->servers[newMasterIndex]->action.state = ActionState::Synced;
+  // 将新主节点在 groups_ 中 server 的位置移到第一行，因为 master 节点都存取在 json 的第一行
   std::swap(group->servers[0], group->servers[newMasterIndex]);
+  // group 的 term-id 发生自增
   group->term_id++;
+  // 向 dashboard 发送 HTTP Post 请求变更 etcd 元信息
   UpdateGroup(group);
+  // 对剩余的从节点发送 slaveof 命令，变更到新的主节点上
   for (auto& server : group->servers) {
     if (server->state != static_cast<int8_t>(GroupState::GroupServerStateNormal) || server->addr == newMasterAddr) {
       continue;
@@ -414,13 +424,16 @@ void SentinelService::DoSwitchGroupMaster(pikiwidb::Group *group, std::string& n
 void SentinelService::TrySwitchGroupMaster(Group* group) {
   std::string newMasterAddr;
   int newMasterIndex = -1;
+  // 选取新的主节点
   SelectNewMaster(group, newMasterAddr, newMasterIndex);
+  // 切换新的主节点
   DoSwitchGroupMaster(group, newMasterAddr, newMasterIndex);
 }
 
 void SentinelService::TrySwitchGroupsToNewMaster() {
   for (auto& group : master_offline_groups_) {
     group->out_of_sync = true;
+    // 变更 group 的 out_of_sync 信息，向 dashboard 发送 HTTP Post 请求, 变更 etcd 元信息
     UpdateGroup(group);
     TrySwitchGroupMaster(group);
   }
@@ -439,33 +452,41 @@ std::string SentinelService::GetMasterAddr(std::string& master_host, std::string
 
 void SentinelService::TryFixReplicationRelationship(Group *group, GroupServer *server,
                                                     ReplicationState *state, int masterofflinegroups) {
-   std::string curMasterAddr = group->servers[0]->addr;
-   if (IsGroupMaster(state, group)) {
-     if (state->replication.role == GroupServerRoleStrings::Master) {
-       return;
-     }
-     Slavenoone(state->addr);
-   } else {
-     if (GetMasterAddr(state->replication.maste_host, state->replication.master_port) == curMasterAddr) {
-       return;
-     }
-     Slaveof(server->addr, curMasterAddr);
-   }
-   server->state = static_cast<int8_t>(GroupState::GroupServerStateNormal);
-   server->recall_times = 0;
-   server->replica_group = true;
-   server->role = state->replication.role;
-   server->db_binlog_filenum = state->replication.db_binlog_filenum;
-   server->db_binlog_offset = state->replication.db_binlog_offset;
-   server->action.state = ActionState::Synced;
-   UpdateGroup(group);
+  std::string curMasterAddr = group->servers[0]->addr;
+  if (IsGroupMaster(state, group)) {
+    // 如果掉线节点之前是主节点，并且很快就恢复，则不用进行处理
+    if (state->replication.role == GroupServerRoleStrings::Master) {
+      return;
+    }
+    // 如果掉线节点之前是主节点，并且离线时间较长，则需要重新 slaveof 新的主节点
+    Slavenoone(state->addr);
+  } else {
+    // 如果掉线节点之前是从节点，在掉线期间没有新的主从关系产生，那么还是保持和原来的状态一致
+    if (GetMasterAddr(state->replication.maste_host, state->replication.master_port) == curMasterAddr) {
+      return;
+    }
+    // 如果掉线节点之前是从节点，在掉线期间有新的主从关系产生，那么需要重新 slaveof 新的主节点
+    Slaveof(server->addr, curMasterAddr);
+  }
+  // 重置 server 节点的元信息
+  server->state = static_cast<int8_t>(GroupState::GroupServerStateNormal);
+  server->recall_times = 0;
+  server->replica_group = true;
+  server->role = state->replication.role;
+  server->db_binlog_filenum = state->replication.db_binlog_filenum;
+  server->db_binlog_offset = state->replication.db_binlog_offset;
+  server->action.state = ActionState::Synced;
+  // 向 dashboard 发送 HTTP Post 请求变更 etcd 元信息
+  UpdateGroup(group);
 }
 
 void SentinelService::TryFixReplicationRelationships(int masterOfflineGroups) {
   for (auto& state : recovered_groups_) {
     auto group = GetGroup(state->group_id);
     group->out_of_sync = true;
+    // 变更 group 的 out_of_sync 信息，向 dashboard 发送 HTTP Post 请求, 变更 etcd 元信息
     UpdateGroup(group);
+    // 由于掉线节点在离线i期间可能有新的主从关系的变更，这里进行这部分的处理
     TryFixReplicationRelationship(group, state->server, state, masterOfflineGroups);
   }
 }
@@ -494,17 +515,22 @@ void SentinelService::CheckMastersAndSlavesState() {
   // to do @chejinge
   // 发送 PKPing 命令进行探活
   // RefreshMastersAndSlavesClientWithPKPing();
+
+  // 对每一个节点的状态值进行遍历，查看是否存活
   for (auto& state : states_) {
     auto group = GetGroup(state->group_id);
     CheckAndUpdateGroupServerState(state->server, state, group);
   }
   if (!slave_offline_groups_.empty()) {
+    // 对客观下线的从节点进行处理
     UpdateSlaveOfflineGroups();
   }
   if (!master_offline_groups_.empty()) {
+    // 对客观下线的主节点进行处理
     TrySwitchGroupsToNewMaster();
   }
   if (!recovered_groups_.empty()) {
+    // 对之前下线过又重新上线的节点进行处理
     TryFixReplicationRelationships(master_offline_groups_.size());
   }
 }
@@ -518,7 +544,7 @@ void SentinelService::Run() {
   // 启动 HTTP-Client
   HTTPClient();
   while (running_) {
-    // Check the status of all masters and slaves every 10 seconds
+    // 每 10 秒检查一次主从状态
     CheckMastersAndSlavesState();
     std::this_thread::sleep_for(std::chrono::seconds(10));
   }
@@ -526,6 +552,7 @@ void SentinelService::Run() {
   server_thread.join();
 }
 
+// Pkping 命令
 void SentinelService::PKPingRedis(std::string& addr, nlohmann::json jsondata) {
   auto host = DeCodeIp(addr);
   auto port = DeCodePort(addr);
@@ -564,6 +591,7 @@ void SentinelService::PKPingRedis(std::string& addr, nlohmann::json jsondata) {
   std::cout << "reply: " << reply_str << std::endl;
 }
 
+// slaveof 命令
 bool SentinelService::Slaveof(const std::string& addr, std::string& newMasterAddr) {
   auto master_ip = DeCodeIp(newMasterAddr);
   auto master_port = DeCodePort(newMasterAddr);
@@ -608,6 +636,7 @@ bool SentinelService::Slaveof(const std::string& addr, std::string& newMasterAdd
   return success;
 }
 
+// slaveof no one 命令
 bool SentinelService::Slavenoone(const std::string& addr) {
   auto host = DeCodeIp(addr);
   auto port = DeCodePort(addr);

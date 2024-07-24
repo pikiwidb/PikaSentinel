@@ -126,6 +126,7 @@ bool PikiwiDB::Init() {
   snprintf(logo, sizeof logo - 1, pikiwidbLogo, PIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
            static_cast<int>(g_config.port));
   std::cout << logo;
+  // sentinel 线程启动
   sentinel_service_->Start();
   return true;
 }

@@ -33,7 +33,6 @@ class PikiwiDB final {
 
  private:
   pikiwidb::IOThreadPool& io_threads_;
-  // Add SentinelService member
   std::unique_ptr<pikiwidb::SentinelService> sentinel_service_;
 };
 

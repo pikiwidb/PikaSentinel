@@ -132,12 +132,12 @@ class SentinelService {
 
   std::atomic<bool> running_;
   std::thread thread_;
-  std::vector<Group*> groups_;
-  std::vector<Group*> slave_offline_groups_;
-  std::vector<Group*> master_offline_groups_;
-  std::vector<ReplicationState*> recovered_groups_;
-  std::vector<ReplicationState*> states_;
-  GroupServer* newMasterServer;
+  std::vector<Group*> groups_; // 保存所有节点的元信息
+  std::vector<Group*> slave_offline_groups_; // 保存离线从节点的元信息
+  std::vector<Group*> master_offline_groups_; // 保存离线主节点的元信息
+  std::vector<ReplicationState*> recovered_groups_; // 保存重新上线节点的元信息
+  std::vector<ReplicationState*> states_; // 保存 pkping 命令状态值的返回信息
+  GroupServer* newMasterServer_; // 新的主节点
 };
 
 }  // namespace pikiwidb
