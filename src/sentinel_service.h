@@ -33,10 +33,10 @@ enum class GroupState : int8_t {
 };
 
 struct GroupInfo {
-  int groupid;
-  int termid;
-  std::vector<std::string> masteraddr;
-  std::vector<std::string> slaveaddr;
+  int group_id;
+  int term_id;
+  std::vector<std::string> masters_addr;
+  std::vector<std::string> slaves_addr;
 };
 
 struct InfoSlave {
@@ -111,12 +111,12 @@ class SentinelService {
   void UpdateSlaveOfflineGroups();
   void TrySwitchGroupsToNewMaster();
   void TryFixReplicationRelationships(int masterofflinegroups);
-  void TrySwitchGroupMaster(Group* group);
+  bool TrySwitchGroupMaster(Group* group);
   void CheckMastersAndSlavesState();
   void UpdateGroup(Group* group);
-  void TryFixReplicationRelationship(Group* group, GroupServer* server, ReplicationState* state, int masterofflinegroups);
+  bool TryFixReplicationRelationship(Group* group, GroupServer* server, ReplicationState* state, int masterofflinegroups);
   void SelectNewMaster(Group* group, std::string& newMasterAddr, int newMasterIndex);
-  void DoSwitchGroupMaster(Group* group, std::string& newMasterAddr, int newMasterIndex);
+  bool DoSwitchGroupMaster(Group* group, std::string& newMasterAddr, int newMasterIndex);
   bool IsGroupMaster(ReplicationState* state, Group* group);
   void CheckAndUpdateGroupServerState(GroupServer* servers, ReplicationState* state, Group* group);
   int DeCodePort(const std::string& serveraddr);
@@ -126,7 +126,7 @@ class SentinelService {
 
  private:
   void Run();
-  void PKPingRedis(std::string& addr, nlohmann::json jsondata, ReplicationState* state);
+  void PKPingRedis(std::string& addr, const nlohmann::json& jsondata, ReplicationState* state);
   bool Slaveof(const std::string& addr, std::string& newMasterAddr);
   bool Slavenoone(const std::string& addr);
 
@@ -137,8 +137,7 @@ class SentinelService {
   std::vector<Group*> master_offline_groups_; // 保存离线主节点的元信息
   std::vector<ReplicationState*> recovered_groups_; // 保存重新上线节点的元信息
   std::vector<ReplicationState*> states_; // 保存 pkping 命令状态值的返回信息
-  GroupServer* newMasterServer_; // 新的主节点
-  std::mutex groups_mtx_; // 用来保护 groups_ 的信息
+  std::mutex groups_mtx_; // 用来保护 groups_ 的锁
 };
 
 }  // namespace pikiwidb
