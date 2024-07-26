@@ -12,9 +12,10 @@
 using json = nlohmann::json;
 namespace pikiwidb {
 
-SentinelService::SentinelService() {
+static bool Slavenoone(const std::string& addr);
+static bool Slaveof(const std::string& addr, const std::string& newMasterAddr);
 
-}
+SentinelService::SentinelService() = default;
 
 SentinelService::~SentinelService() {
   Stop();
@@ -51,8 +52,8 @@ void parseInfoReplication(const std::string& data, InfoReplication& info) {
         size_t lagPos = line.find("lag=");
 
         if (ipPos != std::string::npos && portPos != std::string::npos) {
-          slave.ip = line.substr(ipPos + 3, line.find(",", ipPos) - ipPos - 3);
-          slave.port = line.substr(portPos + 5, line.find(",", portPos) - portPos - 5);
+          slave.ip = line.substr(ipPos + 3, line.find(',', ipPos) - ipPos - 3);
+          slave.port = line.substr(portPos + 5, line.find(',', portPos) - portPos - 5);
         }
 
         if (lagPos != std::string::npos) {
@@ -131,8 +132,8 @@ void to_json(nlohmann::json& j, const GroupInfo& g) {
           {"group_id", g.group_id},
           {"term_id", g.term_id},
           {"masters_addr", g.masters_addr},
-          {"slaves_addr", g.slaves_addr}
-  };
+          {"slaves_addr", g.slaves_addr},
+          {"sentienl_addr"}, g.sentinel_addr};
 }
 
 // json 反序列化函数
@@ -189,10 +190,11 @@ void from_json(const nlohmann::json& j, GroupInfo& g) {
   j.at("term_id").get_to(g.term_id);
   j.at("masters_addr").get_to(g.masters_addr);
   j.at("slaves_addr").get_to(g.slaves_addr);
+  j.at("sentinel_addr").get_to(g.sentinel_addr);
 }
 
 // 根据 addr 地址提取出 ip
-std::string SentinelService::DeCodeIp(const std::string& serveraddr) {
+static std::string DeCodeIp(const std::string& serveraddr) {
   size_t pos = serveraddr.find(':');
   if (pos != std::string::npos) {
     return serveraddr.substr(0, pos);
@@ -201,7 +203,7 @@ std::string SentinelService::DeCodeIp(const std::string& serveraddr) {
 }
 
 // 根据 addr 地址提取出 port
-int SentinelService::DeCodePort(const std::string& serveraddr) {
+static int DeCodePort(const std::string& serveraddr) {
   size_t pos = serveraddr.find(':');
   if (pos != std::string::npos) {
     std::string portStr = serveraddr.substr(pos + 1);
@@ -331,7 +333,7 @@ void SentinelService::HTTPClient() {
   curl_global_cleanup();
 }
 
-bool SentinelService::IsGroupMaster(ReplicationState* state, Group* group) {
+static bool IsGroupMaster(ReplicationState* state, Group* group) {
   return state->index == 0 && group->servers[0]->addr == state->addr;
 }
 
@@ -384,7 +386,7 @@ void SentinelService::CheckAndUpdateGroupServerState(GroupServer* server, Replic
 }
 
 // 向 dashboard 发送 HTTP Post 请求变更 etcd 元信息
-void SentinelService::UpdateGroup(Group* group) {
+static void UpdateGroup(Group* group) {
   nlohmann::json json_group = group;
   curl_global_init(CURL_GLOBAL_ALL);
   CURL* curl = curl_easy_init();
@@ -423,7 +425,7 @@ void SentinelService::UpdateSlaveOfflineGroups() {
   }
 }
 
-void SentinelService::SelectNewMaster(Group* group, std::string& newMasterAddr, int newMasterIndex) {
+static void SelectNewMaster(Group* group, std::string& newMasterAddr, int& newMasterIndex) {
   GroupServer* newMasterServer = nullptr; // 新的主节点
   // 通过 filnume 和 offset 判断哪个节点的数据最新，选取新的主节点
   for (int index = 0; index < group->servers.size(); ++index) {
@@ -453,7 +455,7 @@ void SentinelService::SelectNewMaster(Group* group, std::string& newMasterAddr, 
   newMasterAddr = newMasterServer->addr;
 }
 
-bool SentinelService::DoSwitchGroupMaster(pikiwidb::Group *group, std::string& newMasterAddr, int newMasterIndex) {
+static bool DoSwitchGroupMaster(pikiwidb::Group *group, const std::string& newMasterAddr, const int newMasterIndex) {
   if (newMasterIndex <= 0 || newMasterAddr.empty()) {
     return true;
   }
@@ -488,7 +490,7 @@ bool SentinelService::DoSwitchGroupMaster(pikiwidb::Group *group, std::string& n
   return true;
 }
 
-bool SentinelService::TrySwitchGroupMaster(Group* group) {
+static bool TrySwitchGroupMaster(Group* group) {
   std::string newMasterAddr;
   int newMasterIndex = -1;
   // 选取新的主节点
@@ -512,24 +514,24 @@ void SentinelService::TrySwitchGroupsToNewMaster() {
   }
 }
 
-std::string JoinHostPost(std::string& master_host, std::string& master_port) {
+std::string JoinHostPost(const std::string& master_host, const std::string& master_port) {
   return master_host + ":" + master_port;
 }
 
-std::string SentinelService::GetMasterAddr(std::string& master_host, std::string& master_port) {
+static std::string GetMasterAddr(const std::string& master_host, const std::string& master_port) {
   if (master_host.empty()) {
     return "";
   }
   return JoinHostPost(master_host, master_port);
 }
 
-bool SentinelService::TryFixReplicationRelationship(Group *group, GroupServer *server,
-                                                    ReplicationState *state, int masterofflinegroups) {
+static bool TryFixReplicationRelationship(Group *group, GroupServer *server,
+                                                    ReplicationState *state, const size_t master_offline_groups) {
   std::string curMasterAddr = group->servers[0]->addr;
   if (IsGroupMaster(state, group)) {
     // 如果当前节点是 master 节点，并且主节点客观下线集合中有值，说明不需要处理
     if (state->replication.role == GroupServerRoleStrings::Master) {
-      if (masterofflinegroups > 0) {
+      if (master_offline_groups > 0) {
         return true;
       }
     }
@@ -560,7 +562,7 @@ bool SentinelService::TryFixReplicationRelationship(Group *group, GroupServer *s
   return true;
 }
 
-void SentinelService::TryFixReplicationRelationships(int masterOfflineGroups) {
+void SentinelService::TryFixReplicationRelationships(const size_t masterOfflineGroups) {
   for (auto& state : recovered_groups_) {
     auto group = GetGroup(state->group_id);
     group->out_of_sync = true;
@@ -590,6 +592,7 @@ void SentinelService::RefreshMastersAndSlavesClientWithPKPing() {
     GroupInfo group_info;
     group_info.group_id = group->id;
     group_info.term_id = groups_info[group->id];
+    group_info.sentinel_addr = sentinel_addr_;
     for (auto &server: group->servers) {
       if (server->role == GroupServerRoleStrings::Master) {
         group_info.masters_addr.push_back(server->addr);
@@ -655,11 +658,9 @@ void SentinelService::Run() {
 }
 
 // PKPing 命令
-void SentinelService::PKPingRedis(std::string& addr, const nlohmann::json& jsondata, ReplicationState* state) {
+void SentinelService::PKPingRedis(const std::string& addr, const nlohmann::json& jsondata, ReplicationState* state) {
   auto host = DeCodeIp(addr);
   auto port = DeCodePort(addr);
-  std::cout << "host: " << host << std::endl;
-  std::cout << "port: " << port << std::endl;
   int sock = socket(AF_INET, SOCK_STREAM, 0);
   if (sock < 0) {
     std::cerr << "Socket creation error" << std::endl;
@@ -720,7 +721,7 @@ void SentinelService::PKPingRedis(std::string& addr, const nlohmann::json& jsond
 }
 
 // slaveof 命令
-bool SentinelService::Slaveof(const std::string& addr, std::string& newMasterAddr) {
+static bool Slaveof(const std::string& addr, const std::string& newMasterAddr) {
   auto master_ip = DeCodeIp(newMasterAddr);
   auto master_port = DeCodePort(newMasterAddr);
   auto host = DeCodeIp(addr);
@@ -767,7 +768,7 @@ bool SentinelService::Slaveof(const std::string& addr, std::string& newMasterAdd
 }
 
 // slaveof no one 命令
-bool SentinelService::Slavenoone(const std::string& addr) {
+static bool Slavenoone(const std::string& addr) {
   auto host = DeCodeIp(addr);
   auto port = DeCodePort(addr);
   int sock = socket(AF_INET, SOCK_STREAM, 0);

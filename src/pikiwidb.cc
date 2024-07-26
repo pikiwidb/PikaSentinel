@@ -22,7 +22,6 @@
 #include "client.h"
 
 #include "config.h"
-#include "db.h"
 #include "slow_log.h"
 
 #include "pikiwidb_logo.h"

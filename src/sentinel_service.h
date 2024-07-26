@@ -37,6 +37,7 @@ struct GroupInfo {
   int term_id;
   std::vector<std::string> masters_addr;
   std::vector<std::string> slaves_addr;
+  std::string sentinel_addr;
 };
 
 struct InfoSlave {
@@ -110,25 +111,14 @@ class SentinelService {
   void RefreshMastersAndSlavesClientWithPKPing();
   void UpdateSlaveOfflineGroups();
   void TrySwitchGroupsToNewMaster();
-  void TryFixReplicationRelationships(int masterofflinegroups);
-  bool TrySwitchGroupMaster(Group* group);
+  void TryFixReplicationRelationships(const size_t master_offline_groups);
   void CheckMastersAndSlavesState();
-  void UpdateGroup(Group* group);
-  bool TryFixReplicationRelationship(Group* group, GroupServer* server, ReplicationState* state, int masterofflinegroups);
-  void SelectNewMaster(Group* group, std::string& newMasterAddr, int newMasterIndex);
-  bool DoSwitchGroupMaster(Group* group, std::string& newMasterAddr, int newMasterIndex);
-  bool IsGroupMaster(ReplicationState* state, Group* group);
   void CheckAndUpdateGroupServerState(GroupServer* servers, ReplicationState* state, Group* group);
-  int DeCodePort(const std::string& serveraddr);
-  std::string DeCodeIp(const std::string& serveraddr);
-  std::string GetMasterAddr(std::string& master_host, std::string& master_port);
   Group* GetGroup(int gid);
 
  private:
   void Run();
-  void PKPingRedis(std::string& addr, const nlohmann::json& jsondata, ReplicationState* state);
-  bool Slaveof(const std::string& addr, std::string& newMasterAddr);
-  bool Slavenoone(const std::string& addr);
+  void PKPingRedis(const std::string& addr, const nlohmann::json& jsondata, ReplicationState* state);
 
   std::atomic<bool> running_;
   std::thread thread_;
@@ -138,6 +128,7 @@ class SentinelService {
   std::vector<ReplicationState*> recovered_groups_; // 保存重新上线节点的元信息
   std::vector<ReplicationState*> states_; // 保存 pkping 命令状态值的返回信息
   std::mutex groups_mtx_; // 用来保护 groups_ 的锁
+  std::string sentinel_addr_ = "127.0.0.1:9221";
 };
 
 }  // namespace pikiwidb
