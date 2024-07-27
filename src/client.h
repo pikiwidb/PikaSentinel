@@ -11,110 +11,184 @@
 #include "tcp_connection.h"
 
 #include <set>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
+
 #include "proto_parser.h"
 
 namespace pikiwidb {
+    class CmdRes {
+    public:
+        enum CmdRet {
+            kNone = 0,
+            kOK,
+            kPong,
+            kSyntaxErr,
+            kInvalidInt,
+            kInvalidBitInt,
+            kInvalidBitOffsetInt,
+            kInvalidBitPosArgument,
+            kWrongBitOpNotNum,
+            kInvalidFloat,
+            kOverFlow,
+            kNotFound,
+            kOutOfRange,
+            kInvalidPwd,
+            kNoneBgsave,
+            kPurgeExist,
+            kInvalidParameter,
+            kWrongNum,
+            kInvalidIndex,
+            kInvalidDbType,
+            kInvalidDB,
+            kInconsistentHashTag,
+            kErrOther,
+            KIncrByOverFlow,
+            kInvalidCursor,
+            kWrongLeader,
+        };
 
-enum ClientFlag {
-  ClientFlag_multi = 0x1,
-  ClientFlag_dirty = 0x1 << 1,
-  ClientFlag_wrongExec = 0x1 << 2,
-  ClientFlag_master = 0x1 << 3,
-};
+        CmdRes() = default;
 
-class PClient : public std::enable_shared_from_this<PClient> {
- public:
-  PClient() = delete;
-  explicit PClient(TcpConnection* obj);
+        virtual ~CmdRes();
 
-  int HandlePackets(pikiwidb::TcpConnection*, const char*, int);
+        bool None() const { return ret_ == kNone && message_.empty(); }
 
-  void OnConnect();
+        bool Ok() const { return ret_ == kOK || ret_ == kNone; }
 
-  EventLoop* GetEventLoop(void) const { return tcp_connection_->GetEventLoop(); }
-  TcpConnection* GetTcpConnection(void) const { return tcp_connection_; }
+        void Clear() {
+            message_.clear();
+            ret_ = kNone;
+        }
 
-  const std::string& PeerIP() const { return tcp_connection_->GetPeerIp(); }
-  int PeerPort() const { return tcp_connection_->GetPeerPort(); }
+        inline const std::string &Message() const { return message_; };
 
-  void Close();
+        inline void AppendStringRaw(const std::string &value) { message_.append(value); }
 
-  static PClient* Current();
+        inline void SetLineString(const std::string &value) { message_ = value + CRLF; }
 
-  // multi
-  void SetFlag(unsigned flag) { flag_ |= flag; }
-  void ClearFlag(unsigned flag) { flag_ &= ~flag; }
-  bool IsFlagOn(unsigned flag) { return flag_ & flag; }
-  void FlagExecWrong() {
-    if (IsFlagOn(ClientFlag_multi)) {
-      SetFlag(ClientFlag_wrongExec);
-    }
-  }
+        void AppendString(const std::string &value);
 
-  bool Watch(int dbno, const std::string& key);
-  bool NotifyDirty(int dbno, const std::string& key);
-  bool Exec();
-  void ClearMulti();
-  void ClearWatch();
+        void AppendStringVector(const std::vector<std::string> &strArray);
 
-  // pubsub
-  std::size_t Subscribe(const std::string& channel) { return channels_.insert(channel).second ? 1 : 0; }
+        void RedisAppendLenUint64(std::string &str, uint64_t ori, const std::string &prefix) {
+            RedisAppendLen(str, static_cast<int64_t>(ori), prefix);
+        }
 
-  std::size_t UnSubscribe(const std::string& channel) { return channels_.erase(channel); }
+        void SetRes(CmdRet _ret, const std::string &content = "");
 
-  std::size_t PSubscribe(const std::string& channel) { return pattern_channels_.insert(channel).second ? 1 : 0; }
+        inline void RedisAppendContent(std::string &str, const std::string &value) {
+            str.append(value.data(), value.size());
+            str.append(CRLF);
+        }
 
-  std::size_t PUnSubscribe(const std::string& channel) { return pattern_channels_.erase(channel); }
+        void RedisAppendLen(std::string &str, int64_t ori, const std::string &prefix);
 
-  const std::unordered_set<std::string>& GetChannels() const { return channels_; }
-  const std::unordered_set<std::string>& GetPatternChannels() const { return pattern_channels_; }
-  std::size_t ChannelCount() const { return channels_.size(); }
-  std::size_t PatternChannelCount() const { return pattern_channels_.size(); }
-  const std::unordered_set<std::string> WaitingKeys() const { return waiting_keys_; }
-  void ClearWaitingKeys() { waiting_keys_.clear(), target_.clear(); }
-  const std::string& GetTarget() const { return target_; }
+    private:
+        std::string message_;
+        CmdRet ret_ = kNone;
+    };
 
-  void SetName(const std::string& name) { name_ = name; }
-  const std::string& GetName() const { return name_; }
-  static void AddCurrentToMonitor();
-  static void FeedMonitors(const std::vector<std::string>& params);
+    enum ClientFlag {
+        ClientFlag_multi = 0x1,
+        ClientFlag_dirty = 0x1 << 1,
+        ClientFlag_wrongExec = 0x1 << 2,
+        ClientFlag_master = 0x1 << 3,
+    };
 
-  void SetAuth() { auth_ = true; }
-  bool GetAuth() const { return auth_; }
-  void RewriteCmd(std::vector<std::string>& params) { parser_.SetParams(params); }
+    enum class ClientState {
+        kOK,
+        kClosed,
+    };
 
- private:
-  int handlePacket(pikiwidb::TcpConnection*, const char*, int);
-  int handlePacketNew(pikiwidb::TcpConnection* obj, const std::vector<std::string>& params, const std::string& cmd);
-  int processInlineCmd(const char*, size_t, std::vector<std::string>&);
-  void reset();
-  bool isPeerMaster() const;
+    class PClient : public std::enable_shared_from_this<PClient>, public CmdRes {
+    public:
+        PClient() = delete;
 
-  TcpConnection* const tcp_connection_;
+        explicit PClient(TcpConnection *obj);
 
-  PProtoParser parser_;
-  UnboundedBuffer reply_;
+        int HandlePackets(pikiwidb::TcpConnection *, const char *, int);
 
-  std::unordered_set<std::string> channels_;
-  std::unordered_set<std::string> pattern_channels_;
+        void OnConnect();
 
-  unsigned flag_;
-  std::unordered_map<int, std::unordered_set<std::string> > watch_keys_;
-  std::vector<std::vector<std::string> > queue_cmds_;
+        EventLoop *GetEventLoop(void) const { return tcp_connection_->GetEventLoop(); }
 
-  // blocked list
-  std::unordered_set<std::string> waiting_keys_;
-  std::string target_;
+        TcpConnection *GetTcpConnection(void) const { return tcp_connection_; }
 
-  std::string name_;
+        void Close();
 
-  // auth
-  bool auth_ = false;
-  time_t last_auth_ = 0;
+        static PClient *Current();
 
-  static thread_local PClient* s_current;
-};
+        // multi
+        void SetFlag(unsigned flag) { flag_ |= flag; }
+
+        void ClearFlag(unsigned flag) { flag_ &= ~flag; }
+
+        bool IsFlagOn(unsigned flag) { return flag_ & flag; }
+
+        void FlagExecWrong() {
+            if (IsFlagOn(ClientFlag_multi)) {
+                SetFlag(ClientFlag_wrongExec);
+            }
+        }
+
+        static void FeedMonitors(const std::vector<std::string> &params);
+
+        void SetAuth() { auth_ = true; }
+
+        bool GetAuth() const { return auth_; }
+
+        void RewriteCmd(std::vector<std::string> &params) { parser_.SetParams(params); }
+
+        void SetCmdName(const std::string &name) { cmdName_ = name; }
+
+        const std::string &CmdName() const { return cmdName_; }
+
+        inline size_t ParamsSize() const { return params_.size(); }
+
+        inline ClientState State() const { return state_; }
+
+        inline void SetState(ClientState state) { state_ = state; }
+
+        void WriteReply2Client();
+
+        // All parameters of this command (including the command itself)
+        // e.g：["set","key","value"]
+        std::vector<std::string> argv_;
+
+    private:
+        int handlePacket(pikiwidb::TcpConnection *, const char *, int);
+        void reset();
+        TcpConnection *const tcp_connection_;
+
+        PProtoParser parser_;
+        UnboundedBuffer reply_;
+
+        std::unordered_set<std::string> channels_;
+        std::unordered_set<std::string> pattern_channels_;
+
+        unsigned flag_;
+        std::unordered_map<int, std::unordered_set<std::string> > watch_keys_;
+        std::vector<std::vector<std::string> > queue_cmds_;
+
+        // blocked list
+        std::unordered_set<std::string> waiting_keys_;
+        std::string target_;
+
+        std::string name_;
+        // suchAs config
+        std::string cmdName_;     // suchAs config
+
+        // auth
+        bool auth_ = false;
+        time_t last_auth_ = 0;
+
+        static thread_local PClient *s_current;
+        // All parameters of this command (including the command itself)
+        // e.g：["set","key","value"]
+        std::vector<std::string> params_;
+        ClientState state_;
+    };
 
 }  // namespace pikiwidb
