@@ -231,6 +231,20 @@ void SentinelService::DelGroup(int index) {
   } else {
     std::cerr << "Invalid index: " << index << std::endl;
   }
+  // 输出解析 groups_ 信息
+  std::cout << "************ DEL GROUP **************" << std::endl;
+  std::cout << "Group Size: " << groups_.size() << std::endl;
+  for (const auto& group : groups_) {
+    std::cout << "Group ID: " << group->id << std::endl;
+    std::cout << "Term ID: " << group->term_id << std::endl;
+    std::cout << "Out of Sync: " << group->out_of_sync << std::endl;
+    for (const auto &server: group->servers) {
+      std::cout << "  Server Addr: " << server->addr << std::endl;
+      std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
+      std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
+    }
+  }
+  std::cout << "****************************************8" << std::endl;
 }
 
 void SentinelService::UpdateGroup(nlohmann::json jsonData) {
@@ -260,6 +274,20 @@ void SentinelService::UpdateGroup(nlohmann::json jsonData) {
     server_json.get_to(*server);
     group->servers.push_back(server);
   }
+  // 输出解析 groups_ 信息
+  std::cout << "################### UPDATE GROUP ################" << std::endl;
+  std::cout << "Group Size: " << groups_.size() << std::endl;
+  for (const auto& group : groups_) {
+    std::cout << "Group ID: " << group->id << std::endl;
+    std::cout << "Term ID: " << group->term_id << std::endl;
+    std::cout << "Out of Sync: " << group->out_of_sync << std::endl;
+    for (const auto &server: group->servers) {
+      std::cout << "  Server Addr: " << server->addr << std::endl;
+      std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
+      std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
+    }
+  }
+  std::cout << "################################################" << std::endl;
 }
 
 // HTTP 客户端
@@ -295,6 +323,20 @@ void SentinelService::HTTPClient() {
     } catch (json::type_error& e) {
       std::cerr << "JSON type error: " << e.what() << std::endl;
     }
+    // 输出解析 groups_ 信息
+    std::cout << "----------------- INIT ----------------------" << std::endl;
+    std::cout << "Group Size: " << groups_.size() << std::endl;
+    for (const auto& group : groups_) {
+      std::cout << "Group ID: " << group->id << std::endl;
+      std::cout << "Term ID: " << group->term_id << std::endl;
+      std::cout << "Out of Sync: " << group->out_of_sync << std::endl;
+      for (const auto &server: group->servers) {
+        std::cout << "  Server Addr: " << server->addr << std::endl;
+        std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
+        std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
+      }
+    }
+    std::cout << "-----------------------------------------------" << std::endl;
     curl_easy_cleanup(curl);
   }
   curl_global_cleanup();
@@ -661,15 +703,19 @@ void SentinelService::PKPingRedis(const std::string& addr, const nlohmann::json&
     return;
   }
   std::string reply_str(reply, reply_length);
-
+  std::cout << "pkping reply: " << reply_str << std::endl;
   close(sock);
-  std::cout << "reply: " << reply_str << std::endl;
   if (reply_str.find("Replication") != std::string::npos) {
     state->err = false;
   } else {
     state->err = true;
   }
   parseInfoReplication(reply_str, state->replication);
+  std::cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ PkPing ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
+  std::cout << "ERR: " << state->err << std::endl;
+  std::cout << "Index: " << state->index << std::endl;
+  std::cout << "Group-id: " << state->group_id << std::endl;
+  std::cout << "Addr: "  << state->addr << std::endl;
   std::cout << "Role: " << state->replication.role << std::endl;
   std::cout << "Connected Slaves: " << state->replication.connected_slaves << std::endl;
   std::cout << "master_link_status: " << state->replication.master_link_status << std::endl;
@@ -680,6 +726,7 @@ void SentinelService::PKPingRedis(const std::string& addr, const nlohmann::json&
     std::cout << "Slave Port: " << slave.port << std::endl;
     std::cout << "Slave Offset: " << slave.offset << std::endl;
   }
+  std::cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
   states_.emplace_back(state);
 }
 
@@ -720,11 +767,11 @@ static bool Slaveof(const std::string& addr, const std::string& newMasterAddr) {
   net::SerializeRedisCommand(argv, &cmd);
   send(sock, cmd.c_str(), cmd.size(), 0);
 
-  char reply[1025];
+  char reply[1024];
   ssize_t reply_length = read(sock, reply, 1024);
   std::string reply_str(reply, reply_length);
   close(sock);
-  std::cout << "reply: " << reply_str << std::endl;
+  std::cout << "Slaveof reply: " << reply_str << std::endl;
   bool success = false;
   success = reply_str.find("+OK") != std::string::npos;
   return success;
@@ -770,7 +817,7 @@ static bool Slavenoone(const std::string& addr) {
 
   close(sock);
   bool success = false;
-  std::cout << "reply: " << reply_str << std::endl;
+  std::cout << "Slaveof noone reply: " << reply_str << std::endl;
   success = reply_str.find("+OK") != std::string::npos;
   return success;
 }

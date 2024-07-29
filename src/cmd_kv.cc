@@ -121,8 +121,9 @@ namespace pikiwidb {
       auto jsonData = nlohmann::json::parse(client->argv_[1]);
       g_sentinel_service->UpdateGroup(jsonData);
       client->SetRes(CmdRes::kOK);
+    } else {
+      client->SetRes(CmdRes::kSyntaxErr);
     }
-    client->SetRes(CmdRes::kSyntaxErr);
   }
 
   DelGroupCmd::DelGroupCmd(const std::string &name, int16_t arity)
@@ -138,8 +139,9 @@ namespace pikiwidb {
       int index = jsonData.at("index").get<int>();
       g_sentinel_service->DelGroup(index);
       client->SetRes(CmdRes::kOK);
+    } else {
+      client->SetRes(CmdRes::kSyntaxErr);
     }
-    client->SetRes(CmdRes::kSyntaxErr);
   }
 
 }  // namespace pikiwidb
