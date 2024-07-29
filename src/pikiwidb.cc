@@ -23,7 +23,7 @@
 
 std::unique_ptr<PikiwiDB> g_pikiwidb;
 
-PikiwiDB::PikiwiDB() : io_threads_(pikiwidb::IOThreadPool::Instance()), port_(0),
+PikiwiDB::PikiwiDB() : worker_threads_(), port_(0),
                        sentinel_service_(std::make_unique<pikiwidb::SentinelService>()){ }
 
 PikiwiDB::~PikiwiDB() = default;
@@ -131,7 +131,7 @@ void PikiwiDB::Run() {
 }
 
 void PikiwiDB::Stop() {
-  io_threads_.Exit();
+  worker_threads_.Exit();
   sentinel_service_->Stop();
 }
 

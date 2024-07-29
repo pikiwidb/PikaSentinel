@@ -111,7 +111,7 @@ class SentinelService {
   void RefreshMastersAndSlavesClientWithPKPing();
   void UpdateSlaveOfflineGroups();
   void TrySwitchGroupsToNewMaster();
-  void TryFixReplicationRelationships(const size_t master_offline_groups);
+  void TryFixReplicationRelationships(size_t master_offline_groups);
   void CheckMastersAndSlavesState();
   void CheckAndUpdateGroupServerState(GroupServer* servers, ReplicationState* state, Group* group);
   Group* GetGroup(int gid);

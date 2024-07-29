@@ -35,9 +35,8 @@ class PikiwiDB final {
   std::string log_level_;
 
  private:
-  pikiwidb::IOThreadPool& io_threads_;
-  std::unique_ptr<pikiwidb::SentinelService> sentinel_service_;
   pikiwidb::WorkIOThreadPool worker_threads_;
+  std::unique_ptr<pikiwidb::SentinelService> sentinel_service_;
   pikiwidb::CmdThreadPool cmd_threads_;
 };
 

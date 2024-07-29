@@ -562,7 +562,7 @@ static bool TryFixReplicationRelationship(Group *group, GroupServer *server,
   return true;
 }
 
-void SentinelService::TryFixReplicationRelationships(const size_t masterOfflineGroups) {
+void SentinelService::TryFixReplicationRelationships(size_t masterOfflineGroups) {
   for (auto& state : recovered_groups_) {
     auto group = GetGroup(state->group_id);
     group->out_of_sync = true;
@@ -645,16 +645,16 @@ void SentinelService::CheckMastersAndSlavesState() {
  */
 void SentinelService::Run() {
   // 启动 HTTP-Server 线程
-  std::thread server_thread(&SentinelService::HTTPServer, this);
+  //std::thread server_thread(&SentinelService::HTTPServer, this);
   // 启动 HTTP-Client
-  HTTPClient();
+  //HTTPClient();
   while (running_) {
     // 每 10 秒检查一次主从状态
-    CheckMastersAndSlavesState();
+    //CheckMastersAndSlavesState();
     std::this_thread::sleep_for(std::chrono::seconds(10));
   }
   // 等待 HTTP-Server 线程结束
-  server_thread.join();
+  //server_thread.join();
 }
 
 // PKPing 命令
