@@ -11,7 +11,6 @@
 
 
 #include "cmd_kv.h"
-
 namespace pikiwidb {
 
 #define ADD_COMMAND(cmd, argc)                                                      \
@@ -43,13 +42,14 @@ void CmdTableManager::InitCmdTable() {
   std::unique_lock wl(mutex_);
   // kv
   ADD_COMMAND(UpLoadMeta, 2);
+  ADD_COMMAND(DelGroup, 2);
+  ADD_COMMAND(UpdateGroup, 2);
 }
 
 std::pair<BaseCmd*, CmdRes::CmdRet> CmdTableManager::GetCommand(const std::string& cmdName, PClient* client) {
   std::shared_lock rl(mutex_);
 
   auto cmd = cmds_->find(cmdName);
-
   if (cmd == cmds_->end()) {
     return std::pair(nullptr, CmdRes::kSyntaxErr);
   }

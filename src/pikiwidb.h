@@ -36,8 +36,8 @@ class PikiwiDB final {
 
  private:
   pikiwidb::WorkIOThreadPool worker_threads_;
-  std::unique_ptr<pikiwidb::SentinelService> sentinel_service_;
   pikiwidb::CmdThreadPool cmd_threads_;
 };
 
 extern std::unique_ptr<PikiwiDB> g_pikiwidb;
+extern std::shared_ptr<pikiwidb::SentinelService> g_sentinel_service;

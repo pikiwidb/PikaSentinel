@@ -22,7 +22,9 @@ namespace pikiwidb {
 // command definition
 // base cmd
 const std::string kCmdNamePing = "ping";
-    const std::string kCmdNameUpLoadMeta = "uploadmeta";
+const std::string kCmdNameUpLoadMeta = "uploadmeta";
+const std::string kCmdNameUpdateGroup = "updategroup";
+const std::string kCmdNameDelGroup = "delgroup";
 // key cmd
 const std::string kCmdNameDel = "del";
 const std::string kCmdNameExists = "exists";

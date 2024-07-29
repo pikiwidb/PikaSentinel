@@ -7,7 +7,6 @@
 #include <unistd.h>
 #include <nlohmann/json.hpp>
 #include <curl/curl.h>
-#include "httplib.h"
 
 using json = nlohmann::json;
 namespace pikiwidb {
@@ -225,74 +224,42 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
   return size * nmemb;
 }
 
-// HTTP Server 端
-void SentinelService::HTTPServer() {
-  httplib::Server svr;
-  // 用于处理 dashboard 发来的删除一个 group 的 HTTP 请求
-  svr.Post("/del", [this](const httplib::Request &req, httplib::Response &res) {
-    auto json_data = req.body;
-    try {
-      nlohmann::json jsonData = nlohmann::json::parse(json_data);
-      int index = jsonData.at("index").get<int>();
-      std::lock_guard<std::mutex> lock(groups_mtx_);
-      if (index >= 0 && index < groups_.size()) {
-        groups_.erase(groups_.begin() + index);
-        res.set_content("Group deleted", "text/plain");
-      } else {
-        std::cerr << "Invalid index: " << index << std::endl;
-        res.set_content("Invalid index", "text/plain");
-      }
-    } catch (json::parse_error& e) {
-        std::cerr << "JSON parse error: " << e.what() << std::endl;
-    } catch (json::type_error& e) {
-        std::cerr << "JSON type error: " << e.what() << std::endl;
-    }
-    res.set_content("Update received", "text/plain");
-  });
+void SentinelService::DelGroup(int index) {
+  std::lock_guard<std::mutex> lock(groups_mtx_);
+  if (index >= 0 && index < groups_.size()) {
+    groups_.erase(groups_.begin() + index);
+  } else {
+    std::cerr << "Invalid index: " << index << std::endl;
+  }
+}
 
-  // 用于处理 dashboard 发来的更新 group 信息的 HTTP 请求
-  svr.Post("/update", [this](const httplib::Request &req, httplib::Response &res) {
-    auto json_data = req.body;
-    try {
-      nlohmann::json jsonData = nlohmann::json::parse(json_data);
-      int id = jsonData.at("id").get<int>();
-      std::lock_guard<std::mutex> lock(groups_mtx_);
-      auto it = std::find_if(groups_.begin(), groups_.end(), [id](Group* group) {
-        return group->id == id;
-      });
-      Group* group = nullptr;
-      if (it != groups_.end()) {
-        group = *it;
-        for (auto server : group->servers) {
-          delete server;
-        }
-        group->servers.clear();
-      } else {
-        group = new Group();
-        group->id = id;
-        groups_.push_back(group);
-      }
-      group->out_of_sync = jsonData.at("out_of_sync").get<bool>();
-      group->term_id = jsonData.at("term_id").get<int>();
-      group->promoting = jsonData.at("promoting").get<Promoting>();
-      // 更新 servers 信息
-      for (const auto& server_json : jsonData.at("servers")) {
-        auto server = new GroupServer();
-        server_json.get_to(*server);
-        group->servers.push_back(server);
-      }
-      res.set_content("Group updated", "text/plain");
-    } catch (json::parse_error& e) {
-      std::cerr << "JSON parse error: " << e.what() << std::endl;
-      res.set_content("JSON parse error", "text/plain");
-    } catch (json::type_error& e) {
-      std::cerr << "JSON type error: " << e.what() << std::endl;
-      res.set_content("JSON type error", "text/plain");
-    }
+void SentinelService::UpdateGroup(nlohmann::json jsonData) {
+  int id = jsonData.at("id").get<int>();
+  std::lock_guard<std::mutex> lock(groups_mtx_);
+  auto it = std::find_if(groups_.begin(), groups_.end(), [id](Group* group) {
+      return group->id == id;
   });
-  // HTTP-Server 监听 9225 端口
-  std::cout << "Server listening on http://localhost:9225" << std::endl;
-  svr.listen("0.0.0.0", 9225);
+  Group* group = nullptr;
+  if (it != groups_.end()) {
+    group = *it;
+    for (auto server : group->servers) {
+      delete server;
+    }
+    group->servers.clear();
+  } else {
+    group = new Group();
+    group->id = id;
+    groups_.push_back(group);
+  }
+  group->out_of_sync = jsonData.at("out_of_sync").get<bool>();
+  group->term_id = jsonData.at("term_id").get<int>();
+  group->promoting = jsonData.at("promoting").get<Promoting>();
+  // 更新 servers 信息
+  for (const auto& server_json : jsonData.at("servers")) {
+    auto server = new GroupServer();
+    server_json.get_to(*server);
+    group->servers.push_back(server);
+  }
 }
 
 // HTTP 客户端
@@ -300,11 +267,11 @@ void SentinelService::HTTPClient() {
   CURL* curl;
   CURLcode res;
   std::string readBuffer;
-
+  std::lock_guard<std::mutex> lock(groups_mtx_);
   curl_global_init(CURL_GLOBAL_DEFAULT);
   curl = curl_easy_init();
   if (curl) {
-    curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.55.213:18080/topom/load-meta-data");
+    curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.34.17:18080/topom/load-meta-data");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
 
@@ -393,7 +360,7 @@ static void UpdateGroup(Group* group) {
   if (curl) {
     std::string response_string;
     std::string json_data = json_group.dump(4);
-    curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.55.213:18080/topom/upload-meta-data");
+    curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.34.17:18080/topom/upload-meta-data");
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data.c_str());
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/json");
@@ -644,17 +611,13 @@ void SentinelService::CheckMastersAndSlavesState() {
  * Pika Sentinel 线程启动
  */
 void SentinelService::Run() {
-  // 启动 HTTP-Server 线程
-  //std::thread server_thread(&SentinelService::HTTPServer, this);
   // 启动 HTTP-Client
-  //HTTPClient();
+  HTTPClient();
   while (running_) {
     // 每 10 秒检查一次主从状态
-    //CheckMastersAndSlavesState();
+    CheckMastersAndSlavesState();
     std::this_thread::sleep_for(std::chrono::seconds(10));
   }
-  // 等待 HTTP-Server 线程结束
-  //server_thread.join();
 }
 
 // PKPing 命令

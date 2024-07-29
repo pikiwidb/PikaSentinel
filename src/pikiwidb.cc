@@ -22,9 +22,9 @@
 #include "sentinel_service.h"
 
 std::unique_ptr<PikiwiDB> g_pikiwidb;
+std::shared_ptr<pikiwidb::SentinelService> g_sentinel_service;
 
-PikiwiDB::PikiwiDB() : worker_threads_(), port_(0),
-                       sentinel_service_(std::make_unique<pikiwidb::SentinelService>()){ }
+PikiwiDB::PikiwiDB() : worker_threads_(), port_(0){ }
 
 PikiwiDB::~PikiwiDB() = default;
 
@@ -120,7 +120,8 @@ bool PikiwiDB::Init() {
            static_cast<int>(g_config.port));
   std::cout << logo;
   // sentinel 线程启动
-  sentinel_service_->Start();
+  std::shared_ptr<pikiwidb::SentinelService> g_sentinel_service = std::make_shared<pikiwidb::SentinelService>();
+  g_sentinel_service->Start();
   return true;
 }
 void PikiwiDB::Run() {
@@ -132,7 +133,7 @@ void PikiwiDB::Run() {
 
 void PikiwiDB::Stop() {
   worker_threads_.Exit();
-  sentinel_service_->Stop();
+  g_sentinel_service->Stop();
 }
 
 static void InitLogs() {

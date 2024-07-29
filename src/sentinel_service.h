@@ -107,12 +107,13 @@ class SentinelService {
   void Start();
   void Stop();
   void HTTPClient();
-  void HTTPServer();
   void RefreshMastersAndSlavesClientWithPKPing();
   void UpdateSlaveOfflineGroups();
   void TrySwitchGroupsToNewMaster();
   void TryFixReplicationRelationships(size_t master_offline_groups);
   void CheckMastersAndSlavesState();
+  void DelGroup(int index);
+  void UpdateGroup(nlohmann::json jsonData);
   void CheckAndUpdateGroupServerState(GroupServer* servers, ReplicationState* state, Group* group);
   Group* GetGroup(int gid);
 
@@ -128,7 +129,7 @@ class SentinelService {
   std::vector<ReplicationState*> recovered_groups_; // 保存重新上线节点的元信息
   std::vector<ReplicationState*> states_; // 保存 pkping 命令状态值的返回信息
   std::mutex groups_mtx_; // 用来保护 groups_ 的锁
-  std::string sentinel_addr_ = "127.0.0.1:9221";
+  std::string sentinel_addr_ = "127.0.0.1:9286";
 };
 
 }  // namespace pikiwidb
