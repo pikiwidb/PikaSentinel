@@ -9,6 +9,8 @@
 #include "event_loop.h"
 #include "net/tcp_connection.h"
 #include "sentinel_service.h"
+#include "cmd_thread_pool.h"
+#include <aws/core/Aws.h>
 
 #define PIKIWIDB_VERSION "4.0.0"
 
@@ -23,7 +25,8 @@ class PikiwiDB final {
   bool Init();
   void Run();
   void Stop();
-
+  void SubmitFast(const std::shared_ptr<pikiwidb::CmdThreadPoolTask>& runner) { cmd_threads_.SubmitFast(runner); }
+  void PushWriteTask(const std::shared_ptr<pikiwidb::PClient>& client) { worker_threads_.PushWriteTask(client); }
   void OnNewConnection(pikiwidb::TcpConnection* obj);
 
  public:
@@ -34,6 +37,8 @@ class PikiwiDB final {
  private:
   pikiwidb::IOThreadPool& io_threads_;
   std::unique_ptr<pikiwidb::SentinelService> sentinel_service_;
+  pikiwidb::WorkIOThreadPool worker_threads_;
+  pikiwidb::CmdThreadPool cmd_threads_;
 };
 
 extern std::unique_ptr<PikiwiDB> g_pikiwidb;

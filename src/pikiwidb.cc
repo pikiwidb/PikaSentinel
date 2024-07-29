@@ -10,20 +10,14 @@
 #include "pikiwidb.h"
 
 #include <spawn.h>
-#include <sys/wait.h>
 #include <unistd.h>
-#include <csignal>
 #include <iostream>
-#include <thread>
 #include <memory>
 
 #include "std/log.h"
-
 #include "client.h"
-
 #include "config.h"
 #include "slow_log.h"
-
 #include "pikiwidb_logo.h"
 #include "sentinel_service.h"
 
@@ -112,10 +106,10 @@ bool PikiwiDB::Init() {
   }
 
   NewTcpConnectionCallback cb = std::bind(&PikiwiDB::OnNewConnection, this, std::placeholders::_1);
-  if (!io_threads_.Init(g_config.ip.c_str(), g_config.port, cb)) {
+  if (!worker_threads_.Init(g_config.ip.c_str(), g_config.port, cb)) {
     return false;
   }
-  io_threads_.SetWorkerNum((size_t)(g_config.io_threads_num));
+  worker_threads_.SetWorkerNum((size_t)(g_config.io_threads_num));
 
   PSlowLog::Instance().SetThreshold(g_config.slowlogtime);
   PSlowLog::Instance().SetLogLimit(static_cast<std::size_t>(g_config.slowlogmaxlen));
@@ -130,8 +124,9 @@ bool PikiwiDB::Init() {
   return true;
 }
 void PikiwiDB::Run() {
-  io_threads_.SetName("pikiwi-main");
-  io_threads_.Run(0, nullptr);
+  worker_threads_.SetName("pikiwi-main");
+  cmd_threads_.Start();
+  worker_threads_.Run(0, nullptr);
   INFO("server exit running");
 }
 
