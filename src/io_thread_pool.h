@@ -8,10 +8,13 @@
 #pragma once
 
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <thread>
 
+#include "client.h"
+#include "cmd_thread_pool.h"
 #include "net/event_loop.h"
 #include "net/http_client.h"
 #include "net/http_server.h"
@@ -25,8 +28,9 @@ class IOThreadPool {
 
   bool Init(const char* ip, int port, NewTcpConnectionCallback ccb);
   void Run(int argc, char* argv[]);
-  void Exit();
+    virtual void Exit();
   bool IsExit() const;
+
   EventLoop* BaseLoop();
 
   // choose a loop
@@ -51,13 +55,13 @@ class IOThreadPool {
 
   // HTTP client
   std::shared_ptr<HttpClient> ConnectHTTP(const char* ip, int port, EventLoop* loop = nullptr);
-
+    virtual void PushWriteTask(std::shared_ptr<PClient> /*unused*/){};
   // for unittest only
   void Reset();
 
- private:
+protected:
   IOThreadPool();
-  void StartWorkers();
+    virtual void StartWorkers();
 
   static const size_t kMaxWorkers;
 
@@ -81,4 +85,23 @@ class IOThreadPool {
   std::atomic<State> state_;
 };
 
+    class WorkIOThreadPool : public IOThreadPool {
+    public:
+        WorkIOThreadPool() = default;
+        ~WorkIOThreadPool() = default;
+
+        void Exit() override;
+        void PushWriteTask(std::shared_ptr<PClient> client) override;
+
+    private:
+        void StartWorkers() override;
+
+    private:
+        std::vector<std::thread> writeThreads_;
+        std::vector<std::unique_ptr<std::mutex>> writeMutex_;
+        std::vector<std::unique_ptr<std::condition_variable>> writeCond_;
+        std::vector<std::deque<std::shared_ptr<PClient>>> writeQueue_;
+        std::atomic<uint64_t> counter_ = 0;
+        bool writeRunning_ = true;
+    };
 }  // namespace pikiwidb

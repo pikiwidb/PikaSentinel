@@ -103,8 +103,9 @@ include(cmake/libevent.cmake)
 include(cmake/llhttp.cmake)
 include(cmake/spdlog.cmake)
 include(cmake/fmt.cmake)
+include(cmake/json.cmake)
 
-
+ADD_SUBDIRECTORY(src/pstd)
 ADD_SUBDIRECTORY(src/std)
 ADD_SUBDIRECTORY(src/net)
 ADD_SUBDIRECTORY(src)
