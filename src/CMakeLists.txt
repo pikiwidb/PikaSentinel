@@ -4,9 +4,13 @@ AUX_SOURCE_DIRECTORY(. PIKIWIDB_SRC)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/pstd)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/std)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src/net)
-
-find_package(AWSSDK REQUIRED COMPONENTS  s3-crt transfer kinesis)
+#AWS
+find_package(AWSSDK REQUIRED COMPONENTS  s3 core transfer)
 include_directories(${AWS_INCLUDE_DIR})
+
+#SSL
+find_package(OpenSSL REQUIRED)
+include_directories(${OPENSSL_INCLUDE_DIR})
 
 ADD_EXECUTABLE(pikiwidb ${PIKIWIDB_SRC}
         cmd_thread_pool.cc
@@ -27,5 +31,5 @@ TARGET_INCLUDE_DIRECTORIES(pikiwidb PRIVATE
         ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/src/net
         )
-TARGET_LINK_LIBRARIES(pikiwidb libnet; dl ; fmt; nlohmann_json::nlohmann_json; ${CURL_LIBRARIES}; ${AWSSDK_LINK_LIBRARIES}; pstd)
+TARGET_LINK_LIBRARIES(pikiwidb libnet dl fmt ${AWSSDK_LINK_LIBRARIES} pstd nlohmann_json::nlohmann_json OpenSSL::SSL OpenSSL::Crypto ${CURL_LIBRARIES})
 SET_TARGET_PROPERTIES(pikiwidb PROPERTIES LINKER_LANGUAGE CXX)
