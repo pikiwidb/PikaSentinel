@@ -130,9 +130,10 @@ void to_json(nlohmann::json& j, const GroupInfo& g) {
   j = nlohmann::json{
           {"group_id", g.group_id},
           {"term_id", g.term_id},
-          {"masters_addr", g.masters_addr},
+          {"master_addr", g.master_addr},
           {"slaves_addr", g.slaves_addr},
-          {"sentienl_addr"}, g.sentinel_addr};
+          {"pika_sentinel_addr", g.pika_sentinel_addr}
+  };
 }
 
 // json 反序列化函数
@@ -187,9 +188,9 @@ void from_json(const json& j, Group& g) {
 void from_json(const nlohmann::json& j, GroupInfo& g) {
   j.at("group_id").get_to(g.group_id);
   j.at("term_id").get_to(g.term_id);
-  j.at("masters_addr").get_to(g.masters_addr);
+  j.at("master_addr").get_to(g.master_addr);
   j.at("slaves_addr").get_to(g.slaves_addr);
-  j.at("sentinel_addr").get_to(g.sentinel_addr);
+  j.at("pika_sentinel_addr").get_to(g.pika_sentinel_addr);
 }
 
 // 根据 addr 地址提取出 ip
@@ -277,11 +278,11 @@ void SentinelService::UpdateGroup(nlohmann::json jsonData) {
   // 输出解析 groups_ 信息
   std::cout << "################### UPDATE GROUP ################" << std::endl;
   std::cout << "Group Size: " << groups_.size() << std::endl;
-  for (const auto& group : groups_) {
-    std::cout << "Group ID: " << group->id << std::endl;
-    std::cout << "Term ID: " << group->term_id << std::endl;
-    std::cout << "Out of Sync: " << group->out_of_sync << std::endl;
-    for (const auto &server: group->servers) {
+  for (const auto& groups : groups_) {
+    std::cout << "Group ID: " << groups->id << std::endl;
+    std::cout << "Term ID: " << groups->term_id << std::endl;
+    std::cout << "Out of Sync: " << groups->out_of_sync << std::endl;
+    for (const auto &server: groups->servers) {
       std::cout << "  Server Addr: " << server->addr << std::endl;
       std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
       std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
@@ -601,10 +602,10 @@ void SentinelService::RefreshMastersAndSlavesClientWithPKPing() {
     GroupInfo group_info;
     group_info.group_id = group->id;
     group_info.term_id = groups_info[group->id];
-    group_info.sentinel_addr = sentinel_addr_;
+    group_info.pika_sentinel_addr = pika_sentinel_addr_;
     for (auto &server: group->servers) {
       if (server->role == GroupServerRoleStrings::Master) {
-        group_info.masters_addr.push_back(server->addr);
+        group_info.master_addr = server->addr;
       }
       if (server->role == GroupServerRoleStrings::Slave) {
         group_info.slaves_addr.push_back(server->addr);
@@ -691,6 +692,7 @@ void SentinelService::PKPingRedis(const std::string& addr, const nlohmann::json&
   net::RedisCmdArgsType argv;
   argv.emplace_back("pkping");
   argv.emplace_back(group_info);
+  std::cout << "GROUP-INFO: " << group_info << std::endl;
   net::SerializeRedisCommand(argv, &cmd);
   send(sock, cmd.c_str(), cmd.size(), 0);
 

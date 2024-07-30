@@ -35,9 +35,9 @@ enum class GroupState : int8_t {
 struct GroupInfo {
   int group_id;
   int term_id;
-  std::vector<std::string> masters_addr;
+  std::string master_addr;
+  std::string pika_sentinel_addr;
   std::vector<std::string> slaves_addr;
-  std::string sentinel_addr;
 };
 
 struct InfoSlave {
@@ -129,7 +129,7 @@ class SentinelService {
   std::vector<ReplicationState*> recovered_groups_; // 保存重新上线节点的元信息
   std::vector<ReplicationState*> states_; // 保存 pkping 命令状态值的返回信息
   std::mutex groups_mtx_; // 用来保护 groups_ 的锁
-  std::string sentinel_addr_ = "127.0.0.1:9286";
+  std::string pika_sentinel_addr_ = "127.0.0.1:9286";
 };
 
 }  // namespace pikiwidb
