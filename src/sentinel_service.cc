@@ -227,8 +227,9 @@ size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
 
 void SentinelService::DelGroup(int index) {
   std::lock_guard<std::mutex> lock(groups_mtx_);
-  if (index >= 0 && index < groups_.size()) {
-    groups_.erase(groups_.begin() + index);
+  auto iter = groups_.find(index);
+  if (iter != groups_.end()) {
+    groups_.erase(index);
   } else {
     std::cerr << "Invalid index: " << index << std::endl;
   }
@@ -236,10 +237,10 @@ void SentinelService::DelGroup(int index) {
   std::cout << "************ DEL GROUP **************" << std::endl;
   std::cout << "Group Size: " << groups_.size() << std::endl;
   for (const auto& group : groups_) {
-    std::cout << "Group ID: " << group->id << std::endl;
-    std::cout << "Term ID: " << group->term_id << std::endl;
-    std::cout << "Out of Sync: " << group->out_of_sync << std::endl;
-    for (const auto &server: group->servers) {
+    std::cout << "Group ID: " << group.second->id << std::endl;
+    std::cout << "Term ID: " << group.second->term_id << std::endl;
+    std::cout << "Out of Sync: " << group.second->out_of_sync << std::endl;
+    for (const auto &server: group.second->servers) {
       std::cout << "  Server Addr: " << server->addr << std::endl;
       std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
       std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
@@ -251,12 +252,10 @@ void SentinelService::DelGroup(int index) {
 void SentinelService::UpdateGroup(nlohmann::json jsonData) {
   int id = jsonData.at("id").get<int>();
   std::lock_guard<std::mutex> lock(groups_mtx_);
-  auto it = std::find_if(groups_.begin(), groups_.end(), [id](Group* group) {
-      return group->id == id;
-  });
+  auto iter = groups_.find(id);
   Group* group = nullptr;
-  if (it != groups_.end()) {
-    group = *it;
+  if (iter != groups_.end()) {
+    group = iter->second;
     for (auto server : group->servers) {
       delete server;
     }
@@ -264,7 +263,7 @@ void SentinelService::UpdateGroup(nlohmann::json jsonData) {
   } else {
     group = new Group();
     group->id = id;
-    groups_.push_back(group);
+    groups_[id] = group;
   }
   group->out_of_sync = jsonData.at("out_of_sync").get<bool>();
   group->term_id = jsonData.at("term_id").get<int>();
@@ -279,10 +278,10 @@ void SentinelService::UpdateGroup(nlohmann::json jsonData) {
   std::cout << "################### UPDATE GROUP ################" << std::endl;
   std::cout << "Group Size: " << groups_.size() << std::endl;
   for (const auto& groups : groups_) {
-    std::cout << "Group ID: " << groups->id << std::endl;
-    std::cout << "Term ID: " << groups->term_id << std::endl;
-    std::cout << "Out of Sync: " << groups->out_of_sync << std::endl;
-    for (const auto &server: groups->servers) {
+    std::cout << "Group ID: " << groups.second->id << std::endl;
+    std::cout << "Term ID: " << groups.second->term_id << std::endl;
+    std::cout << "Out of Sync: " << groups.second->out_of_sync << std::endl;
+    for (const auto &server: groups.second->servers) {
       std::cout << "  Server Addr: " << server->addr << std::endl;
       std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
       std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
@@ -317,7 +316,8 @@ void SentinelService::HTTPClient() {
       for (const auto& item : jsonData) {
         auto* g = new Group;
         item.get_to(*g);
-        groups_.push_back(g);
+        auto gid = g->id;
+        groups_[gid] = g;
       }
     } catch (json::parse_error& e) {
       std::cerr << "JSON parse error: " << e.what() << std::endl;
@@ -328,10 +328,10 @@ void SentinelService::HTTPClient() {
     std::cout << "----------------- INIT ----------------------" << std::endl;
     std::cout << "Group Size: " << groups_.size() << std::endl;
     for (const auto& group : groups_) {
-      std::cout << "Group ID: " << group->id << std::endl;
-      std::cout << "Term ID: " << group->term_id << std::endl;
-      std::cout << "Out of Sync: " << group->out_of_sync << std::endl;
-      for (const auto &server: group->servers) {
+      std::cout << "Group ID: " << group.second->id << std::endl;
+      std::cout << "Term ID: " << group.second->term_id << std::endl;
+      std::cout << "Out of Sync: " << group.second->out_of_sync << std::endl;
+      for (const auto &server: group.second->servers) {
         std::cout << "  Server Addr: " << server->addr << std::endl;
         std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
         std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
@@ -348,10 +348,9 @@ static bool IsGroupMaster(ReplicationState* state, Group* group) {
 }
 
 Group* SentinelService::GetGroup(int gid) {
-  for (auto& group : groups_) {
-    if (group->id == gid) {
-      return group;
-    }
+  auto it = groups_.find(gid);
+  if (it != groups_.end()) {
+    return it->second;
   }
   return nullptr;
 }
@@ -601,17 +600,17 @@ void SentinelService::RefreshMastersAndSlavesClientWithPKPing() {
   std::map<int, int> groups_info;
   // 建立 gid 和 term-id 的映射关系
   for (auto& group : groups_) {
-    groups_info[group->id] = group->term_id;
+    groups_info[group.second->id] = group.second->term_id;
   }
   // 因为在同一个 Group 里面的节点，向它们发送的 group_info 肯定是一样的，所以用 map 存储
   std::map<int, GroupInfo> groups_parameter;
   // 组装 PkPing 命令的 GroupInfo 信息
   for (auto& group : groups_) {
     GroupInfo group_info;
-    group_info.group_id = group->id;
-    group_info.term_id = groups_info[group->id];
+    group_info.group_id = group.second->id;
+    group_info.term_id = groups_info[group.second->id];
     group_info.pika_sentinel_addr = pika_sentinel_addr_;
-    for (auto &server: group->servers) {
+    for (auto &server: group.second->servers) {
       if (server->role == GroupServerRoleStrings::Master) {
         group_info.master_addr = server->addr;
       }
@@ -619,19 +618,19 @@ void SentinelService::RefreshMastersAndSlavesClientWithPKPing() {
         group_info.slaves_addr.push_back(server->addr);
       }
     }
-    groups_parameter[group->id] = group_info;
+    groups_parameter[group.second->id] = group_info;
   }
   for (auto& group : groups_) {
-    nlohmann::json json_groupInfo = groups_parameter[group->id];
-    for (int index = 0; index < group->servers.size(); ++index) {
+    nlohmann::json json_groupInfo = groups_parameter[group.second->id];
+    for (int index = 0; index < group.second->servers.size(); ++index) {
       auto state = new ReplicationState();
-      state->addr = group->servers[index]->addr;
-      state->server = group->servers[index];
-      state->group_id = group->id;
+      state->addr = group.second->servers[index]->addr;
+      state->server = group.second->servers[index];
+      state->group_id = group.second->id;
       state->err = false;
       state->index = index;
       // 发送 PkPing 命令给目标节点
-      PKPingRedis(group->servers[index]->addr, json_groupInfo, state);
+      PKPingRedis(group.second->servers[index]->addr, json_groupInfo, state);
     }
   }
 }
