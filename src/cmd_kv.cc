@@ -137,6 +137,10 @@ namespace pikiwidb {
         int group_id = json["group_id"];
         int term_id = json["term_id"];
         auto group = g_sentinel_service->GetGroup(group_id);
+        if (group == nullptr) {
+          client->SetRes(CmdRes::kErrOther, "group is not found");
+          return;
+        }
         if (group->term_id != term_id) {
           client->SetRes(CmdRes::kErrOther, "Term-ids are not equal");
           return;

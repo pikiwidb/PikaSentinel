@@ -348,6 +348,9 @@ static bool IsGroupMaster(ReplicationState* state, Group* group) {
 }
 
 Group* SentinelService::GetGroup(int gid) {
+  if (gid < 0) {
+    return nullptr;
+  }
   return groups_[gid];
 }
 
@@ -575,6 +578,9 @@ static bool TryFixReplicationRelationship(Group *group, GroupServer *server,
 void SentinelService::TryFixReplicationRelationships(size_t masterOfflineGroups) {
   for (auto& state : recovered_groups_) {
     auto group = GetGroup(state->group_id);
+    if (group == nullptr) {
+      std::cerr << "group-[" << state->group_id << "] is not found" << std::endl;
+    }
     group->out_of_sync = true;
     // 变更 group 的 out_of_sync 信息，向 dashboard 发送 HTTP Post 请求, 变更 etcd 元信息
     UpdateGroup(group);
@@ -634,6 +640,9 @@ void SentinelService::CheckMastersAndSlavesState() {
   // 对每一个节点的状态值进行遍历，查看是否存活
   for (auto& state : states_) {
     auto group = GetGroup(state->group_id);
+    if (group == nullptr) {
+      std::cerr << "group-[" << state->group_id << "] is not found" << std::endl;
+    }
     CheckAndUpdateGroupServerState(state->server, state, group);
   }
   if (!slave_offline_groups_.empty()) {
