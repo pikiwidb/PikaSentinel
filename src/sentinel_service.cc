@@ -348,10 +348,12 @@ static bool IsGroupMaster(ReplicationState* state, Group* group) {
 }
 
 Group* SentinelService::GetGroup(int gid) {
-  if (gid < 0) {
-    return nullptr;
+  for (auto& group : groups_) {
+    if (group->id == gid) {
+      return group;
+    }
   }
-  return groups_[gid];
+  return nullptr;
 }
 
 /*
