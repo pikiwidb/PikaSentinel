@@ -23,6 +23,13 @@ ADD_EXECUTABLE(pikiwidb ${PIKIWIDB_SRC}
         cmd_table_manager.cc)
 
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
+SET(CURL_LIBRARY "-lcurl")
 
-TARGET_LINK_LIBRARIES(pikiwidb libnet dl fmt ${AWSSDK_LINK_LIBRARIES} pstd nlohmann_json::nlohmann_json OpenSSL::SSL OpenSSL::Crypto)
+FIND_PACKAGE(CURL REQUIRED)
+
+TARGET_INCLUDE_DIRECTORIES(pikiwidb PRIVATE
+        ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/src/net
+        )
+TARGET_LINK_LIBRARIES(pikiwidb libnet dl fmt ${AWSSDK_LINK_LIBRARIES} pstd nlohmann_json::nlohmann_json OpenSSL::SSL OpenSSL::Crypto ${CURL_LIBRARIES})
 SET_TARGET_PROPERTIES(pikiwidb PROPERTIES LINKER_LANGUAGE CXX)

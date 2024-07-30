@@ -191,13 +191,13 @@ inline void AdjustIndex(long& start, long& end, size_t size) {
   }
 }
 
-struct NocaseComp {
-  bool operator()(const std::string& s1, const std::string& s2) const { return strcasecmp(s1.c_str(), s2.c_str()) < 0; }
-
-  bool operator()(const char* s1, const std::string& s2) const { return strcasecmp(s1, s2.c_str()) < 0; }
-
-  bool operator()(const std::string& s1, const char* s2) const { return strcasecmp(s1.c_str(), s2) < 0; }
-};
+//struct NocaseComp {
+//  bool operator()(const std::string& s1, const std::string& s2) const { return strcasecmp(s1.c_str(), s2.c_str()) < 0; }
+//
+//  bool operator()(const char* s1, const std::string& s2) const { return strcasecmp(s1, s2.c_str()) < 0; }
+//
+//  bool operator()(const std::string& s1, const char* s2) const { return strcasecmp(s1.c_str(), s2) < 0; }
+//};
 
 enum class PParseResult : int8_t {
   ok,

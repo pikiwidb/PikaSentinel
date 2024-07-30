@@ -19,10 +19,12 @@
 #include "config.h"
 #include "slow_log.h"
 #include "pikiwidb_logo.h"
+#include "sentinel_service.h"
 
 std::unique_ptr<PikiwiDB> g_pikiwidb;
+std::shared_ptr<pikiwidb::SentinelService> g_sentinel_service;
 
-PikiwiDB::PikiwiDB() : worker_threads_(), port_(0) { }
+PikiwiDB::PikiwiDB() : worker_threads_(), port_(0){ }
 
 PikiwiDB::~PikiwiDB() = default;
 
@@ -107,7 +109,7 @@ bool PikiwiDB::Init() {
   if (!worker_threads_.Init(g_config.ip.c_str(), g_config.port, cb)) {
     return false;
   }
-    worker_threads_.SetWorkerNum((size_t)(g_config.io_threads_num));
+  worker_threads_.SetWorkerNum((size_t)(g_config.io_threads_num));
 
   PSlowLog::Instance().SetThreshold(g_config.slowlogtime);
   PSlowLog::Instance().SetLogLimit(static_cast<std::size_t>(g_config.slowlogmaxlen));
@@ -117,17 +119,22 @@ bool PikiwiDB::Init() {
   snprintf(logo, sizeof logo - 1, pikiwidbLogo, PIKIWIDB_VERSION, static_cast<int>(sizeof(void*)) * 8,
            static_cast<int>(g_config.port));
   std::cout << logo;
-
+  // sentinel 线程启动
+  std::shared_ptr<pikiwidb::SentinelService> g_sentinel_service = std::make_shared<pikiwidb::SentinelService>();
+  g_sentinel_service->Start();
   return true;
 }
 void PikiwiDB::Run() {
-    worker_threads_.SetName("pikiwi-main");
+  worker_threads_.SetName("pikiwi-main");
   cmd_threads_.Start();
-    worker_threads_.Run(0, nullptr);
+  worker_threads_.Run(0, nullptr);
   INFO("server exit running");
 }
 
-void PikiwiDB::Stop() { worker_threads_.Exit(); }
+void PikiwiDB::Stop() {
+  worker_threads_.Exit();
+  g_sentinel_service->Stop();
+}
 
 static void InitLogs() {
   logger::Init("logs/pikiwidb_server.log");

@@ -105,7 +105,6 @@ namespace pikiwidb {
     }
 
     bool TcpConnection::SendPacket(const void *data, size_t size) {
-        INFO("bxbxbxbx send packet", data);
         if (state_ != State::kConnected) {
             ERROR("send tcp data in wrong state {}", static_cast<int>(state_));
             return false;

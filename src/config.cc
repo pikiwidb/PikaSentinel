@@ -149,9 +149,6 @@ bool LoadPikiwiDBConfig(const char* cfgFile, PConfig& cfg) {
   }
   cfg.masterauth = parser.GetData<std::string>("masterauth");
 
-  // load modules' names
-  cfg.modules = parser.GetDataVector("loadmodule");
-
   cfg.includefile = parser.GetData<std::string>("include");  // TODO multi files include
 
   // lru cache
