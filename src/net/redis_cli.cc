@@ -5,7 +5,7 @@
 
 #include "redis_cli.h"
 #include <cstdarg>
-
+#include <cstring>
 #include <atomic>
 #include <string>
 #include <utility>
