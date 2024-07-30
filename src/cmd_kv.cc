@@ -6,44 +6,90 @@
  */
 
 #include "cmd_kv.h"
-#include <iostream>
-#include <aws/core/auth/AWSCredentials.h>
 
+#include <iostream>
+
+#include <aws/core/auth/AWSCredentials.h>
 #include "aws/s3/S3Client.h"
 #include "aws/core/Aws.h"
 #include "aws/core/auth/AWSAuthSignerProvider.h"
-#include "aws/S3/model/PutObjectRequest.h"
+#include "aws/s3/model/PutObjectRequest.h"
 #include "nlohmann/json.hpp"
+#include <openssl/evp.h>
+#include <openssl/bio.h>
+#include <openssl/buffer.h>
 
 namespace pikiwidb {
+
+    int base64_decode(std::string base64_str, char **output,  int *out_len)
+    {
+        BIO *bio = NULL;
+        BIO *b64 = NULL;
+        char *buffer = NULL;
+        int buf_len = 0;
+        int decoded_len = 0;
+        int ret = 0;
+
+        if (NULL == output || NULL == out_len) {
+            return -1;
+        }
+
+        b64 = BIO_new(BIO_f_base64());
+        BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+
+        bio = BIO_new_mem_buf(base64_str.c_str(), base64_str.length());
+        bio = BIO_push(b64, bio);
+
+        buf_len = base64_str.length() * 3 / 4;
+        buffer = (char *)calloc(1, buf_len + 1);
+        if (NULL == buffer) {
+            ret = -1;
+            goto __Failed;
+        }
+
+        decoded_len = BIO_read(b64, buffer, base64_str.length());
+        if (0 >= decoded_len) {
+            ret = -1;
+            goto __Failed;
+        }
+        buffer[decoded_len] = '\0';
+        *output = (char *)buffer;
+        *out_len = decoded_len;
+
+        BIO_free_all(bio);
+        return ret;
+
+        __Failed:
+        BIO_free_all(bio);
+        free(buffer);
+        return -1;
+    }
+
     bool uploadfile(const std::string &bucket_name, const std::string &bucket_path, const std::string &content) {
         Aws::SDKOptions m_options;
         Aws::S3::S3Client *m_client2 = {NULL};
 
         Aws::InitAPI(m_options);
         Aws::Client::ClientConfiguration cfg;
-        cfg.endpointOverride = "http://beijing2.xstore.qihoo.net";  // S3服务器地址和端口
+        cfg.endpointOverride = "http://beijing2.xstore.qihoo.net";
         cfg.scheme = Aws::Http::Scheme::HTTP;
         cfg.verifySSL = false;
-        Aws::Auth::AWSCredentials cred("YHDIJ1LCITN7YHLETHLW", "fR5b2hEOzeogmiR01FzvYpb9BNt8eSrt0crHy510");  // 认证的Key
+        Aws::Auth::AWSCredentials cred("YHDIJ1LCITN7YHLETHLW", "fR5b2hEOzeogmiR01FzvYpb9BNt8eSrt0crHy510");
+
+        char *output = NULL;
+        int out_len = 0;
+        base64_decode(content, &output, &out_len) ;
 
         auto m_client = Aws::S3::S3Client(cred, nullptr, cfg);
-        //new S3Client(Aws::Auth::AWSCredentials("test", "12345678"), cfg, false, false);
-
         Aws::S3::Model::PutObjectRequest putObjectRequest;
         putObjectRequest.SetBucket(Aws::String(bucket_name));
         putObjectRequest.SetKey(Aws::String(bucket_path));
-        //putObjectRequest.WithBucket(BucketName.c_str()).WithKey(objectKey.c_str());
 
-        // auto inputData =
-        //       Aws::MakeShared<Aws::FStream>(object_path.c_str(), local_file.c_str(),
-        //                                   std::ios_base::in | std::ios_base::out);
+        const std::shared_ptr<Aws::IOStream> inputData =
+                Aws::MakeShared<Aws::StringStream>("");
+        inputData->write(output, out_len);
+        putObjectRequest.SetBody(inputData);
 
-        // Aws::MakeShared<Aws::FStream>(pathkey.c_str(), pathkey.c_str(), std::ios_base::in | std::ios_base::binary);
-        auto input_data = Aws::MakeShared<Aws::StringStream>(content.c_str());
-        //auto input_data = Aws::MakeShared<Aws::FStream>(pathkey.c_str(), pathkey.c_str(), std::ios_base::in | std::ios_base::binary);
-        //Aws::MakeShared<Aws::FStream>("PutObjectInputStream", "/Users/charlieqiao/Desktop/bz.cc", std::ios_base::in | std::ios_base::binary);
-        putObjectRequest.SetBody(input_data);
         auto putObjectResult = m_client.PutObject(putObjectRequest);
         if (putObjectResult.IsSuccess()) {
             std::cout << "Done!" << std::endl;
@@ -62,7 +108,6 @@ namespace pikiwidb {
         Aws::ShutdownAPI(m_options);
     }
 
-
     UpLoadMetaCmd::UpLoadMetaCmd(const std::string &name, int16_t arity)
             : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
 
@@ -73,30 +118,18 @@ namespace pikiwidb {
 
 
     void UpLoadMetaCmd::DoCmd(PClient *client) {
-        // "{\n\t\"term_id\":\t-1,\n\t\"group_id\":\t-1,\n\t\"s3_bucket\":\t\"pulsar-s3-test-beijing2\",\n\t\
-        // "s3_path\":\t\"/db/db0/0/CLOUDMANIFEST\",\n\t\"content\":\t\"sDRj9wIAAQEBE/7mvhIAAQIQNGM2Njc2ZmViMzRiMmExYQ==\"\n}"
+        if (client->argv_.size() != 2) {
+            client->SetRes(CmdRes::kErrOther, "Err argv num");
+            return;
+        }
         auto json = nlohmann::json::parse(client->argv_[1]);
-        std::cout << "term id:" << json.at("term_id") << std::endl;
-        std::cout << "group id: " << json.at("group_id") << std::endl;
-        std::cout << "s3_bucket: " << json.at("s3_bucket") << std::endl;
-        std::cout << "s3_path: " << json.at("s3_path") << std::endl;
-        std::cout << "content: " << json.at("content") << std::endl;
-        client->SetRes(CmdRes::kOK);
-        client->CmdName();
-        uploadfile(json.at("s3_bucket"), json.at("s3_path"), json.at("content"));
-        // client->SetRes(CmdRes::kErrOther, s.ToString());
-        //client->AppendStringRaw("");
-        /*
-      PString value;
-      uint64_t ttl = -1;
-      storage::Status s = PSTORE.GetBackend(client->GetCurrentDB())->GetStorage()->GetWithTTL(client->Key(), &value, &ttl);
-      if (s.ok()) {
-        client->AppendString(value);
-      } else if (s.IsNotFound()) {
-        client->AppendString("");
-      } else {
-        client->SetRes(CmdRes::kSyntaxErr, "get key error");
-      }*/
+        if (json.contains("term_id") && json.contains("group_id")
+        && json.contains("s3_bucket") && json.contains("s3_path")
+        && json.contains("content")) {
+            uploadfile(json.at("s3_bucket"), json.at("s3_path"), json.at("content"));
+            client->SetRes(CmdRes::kOK);
+        }
+        client->SetRes(CmdRes::kErrOther, "Err json");
     }
 
 }  // namespace pikiwidb
