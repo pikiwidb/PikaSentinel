@@ -13,6 +13,8 @@ namespace pikiwidb {
 
 static bool Slavenoone(const std::string& addr);
 static bool Slaveof(const std::string& addr, const std::string& newMasterAddr);
+static struct curl_slist* headers = nullptr;
+CURL* curl = curl_easy_init();
 
 SentinelService::SentinelService() = default;
 
@@ -30,6 +32,30 @@ void SentinelService::Stop() {
   if (thread_.joinable()) {
     thread_.join();
   }
+}
+
+// 初始化 CURL 环境和 HTTP 头
+void InitCurl() {
+  curl_global_init(CURL_GLOBAL_ALL);
+  curl = curl_easy_init();
+  if (curl) {
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 120L);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPINTVL, 60L);
+  }
+}
+
+// 清理 CURL 环境
+void CleanupCurl() {
+  if (headers) {
+    curl_slist_free_all(headers);
+  }
+  if (curl) {
+    curl_easy_cleanup(curl);
+  }
+  curl_global_cleanup();
 }
 
 void parseInfoReplication(const std::string& data, InfoReplication& info) {
@@ -233,20 +259,20 @@ void SentinelService::DelGroup(int index) {
   } else {
     std::cerr << "Invalid index: " << index << std::endl;
   }
-  // 输出解析 groups_ 信息
-  std::cout << "************ DEL GROUP **************" << std::endl;
-  std::cout << "Group Size: " << groups_.size() << std::endl;
-  for (const auto& group : groups_) {
-    std::cout << "Group ID: " << group.second->id << std::endl;
-    std::cout << "Term ID: " << group.second->term_id << std::endl;
-    std::cout << "Out of Sync: " << group.second->out_of_sync << std::endl;
-    for (const auto &server: group.second->servers) {
-      std::cout << "  Server Addr: " << server->addr << std::endl;
-      std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
-      std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
-    }
-  }
-  std::cout << "****************************************8" << std::endl;
+//  // 输出解析 groups_ 信息
+//  std::cout << "************ DEL GROUP **************" << std::endl;
+//  std::cout << "Group Size: " << groups_.size() << std::endl;
+//  for (const auto& group : groups_) {
+//    std::cout << "Group ID: " << group.second->id << std::endl;
+//    std::cout << "Term ID: " << group.second->term_id << std::endl;
+//    std::cout << "Out of Sync: " << group.second->out_of_sync << std::endl;
+//    for (const auto &server: group.second->servers) {
+//      std::cout << "  Server Addr: " << server->addr << std::endl;
+//      std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
+//      std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
+//    }
+//  }
+//  std::cout << "****************************************8" << std::endl;
 }
 
 void SentinelService::UpdateGroup(nlohmann::json jsonData) {
@@ -274,41 +300,34 @@ void SentinelService::UpdateGroup(nlohmann::json jsonData) {
     server_json.get_to(*server);
     group->servers.push_back(server);
   }
-  // 输出解析 groups_ 信息
-  std::cout << "################### UPDATE GROUP ################" << std::endl;
-  std::cout << "Group Size: " << groups_.size() << std::endl;
-  for (const auto& groups : groups_) {
-    std::cout << "Group ID: " << groups.second->id << std::endl;
-    std::cout << "Term ID: " << groups.second->term_id << std::endl;
-    std::cout << "Out of Sync: " << groups.second->out_of_sync << std::endl;
-    for (const auto &server: groups.second->servers) {
-      std::cout << "  Server Addr: " << server->addr << std::endl;
-      std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
-      std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
-    }
-  }
-  std::cout << "################################################" << std::endl;
+//  // 输出解析 groups_ 信息
+//  std::cout << "################### UPDATE GROUP ################" << std::endl;
+//  std::cout << "Group Size: " << groups_.size() << std::endl;
+//  for (const auto& groups : groups_) {
+//    std::cout << "Group ID: " << groups.second->id << std::endl;
+//    std::cout << "Term ID: " << groups.second->term_id << std::endl;
+//    std::cout << "Out of Sync: " << groups.second->out_of_sync << std::endl;
+//    for (const auto &server: groups.second->servers) {
+//      std::cout << "  Server Addr: " << server->addr << std::endl;
+//      std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
+//      std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
+//    }
+//  }
+//  std::cout << "################################################" << std::endl;
 }
 
 // HTTP 客户端
 void SentinelService::HTTPClient() {
-  CURL* curl;
-  CURLcode res;
   std::string readBuffer;
   std::lock_guard<std::mutex> lock(groups_mtx_);
-  curl_global_init(CURL_GLOBAL_DEFAULT);
-  curl = curl_easy_init();
   if (curl) {
     curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.34.17:18080/topom/load-meta-data");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
 
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
       std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-    } else {
-      // 获取到从 dashboard 拿到的数据装载到 readbuffer 中
-      std::cout << "Response Data: " << readBuffer << std::endl;
     }
     // 解析从 dashboard 获取的 JSON 数据, 填充元信息到 groups_ 中
     try {
@@ -324,23 +343,7 @@ void SentinelService::HTTPClient() {
     } catch (json::type_error& e) {
       std::cerr << "JSON type error: " << e.what() << std::endl;
     }
-    // 输出解析 groups_ 信息
-    std::cout << "----------------- INIT ----------------------" << std::endl;
-    std::cout << "Group Size: " << groups_.size() << std::endl;
-    for (const auto& group : groups_) {
-      std::cout << "Group ID: " << group.second->id << std::endl;
-      std::cout << "Term ID: " << group.second->term_id << std::endl;
-      std::cout << "Out of Sync: " << group.second->out_of_sync << std::endl;
-      for (const auto &server: group.second->servers) {
-        std::cout << "  Server Addr: " << server->addr << std::endl;
-        std::cout << "  State: " << static_cast<int>(server->state) << std::endl;
-        std::cout << "  Recall Times: " << static_cast<int>(server->recall_times) << std::endl;
-      }
-    }
-    std::cout << "-----------------------------------------------" << std::endl;
-    curl_easy_cleanup(curl);
   }
-  curl_global_cleanup();
 }
 
 static bool IsGroupMaster(ReplicationState* state, Group* group) {
@@ -361,6 +364,7 @@ Group* SentinelService::GetGroup(int gid) {
 void SentinelService::CheckAndUpdateGroupServerState(GroupServer* server, ReplicationState* state, Group* group) {
   // 如果 err 值为 true，说明没有存活
   if (state->err) {
+     std::cout << "subject offline addr: " << server->addr << std::endl;
     if (server->state == static_cast<int8_t>(GroupState::GroupServerStateNormal)) {
       // 节点主观下线
       server->state = static_cast<int8_t>(GroupState::GroupServerStateSubjectiveOffline);
@@ -368,8 +372,9 @@ void SentinelService::CheckAndUpdateGroupServerState(GroupServer* server, Replic
       // 探活失败计数
       server->recall_times++;
       // 如果累加到 10 次还是未存活
-      if (server->recall_times >= 10) {
+      if (server->recall_times >= 2) {
         // 节点客观下线，更新元信息
+        std::cout << "offline addr: " << server->addr << std::endl;
         server->state = static_cast<int8_t>(GroupState::GroupServerStateOffline);
         server->action.state = ActionState::Nothing;
         server->replica_group = false;
@@ -400,42 +405,31 @@ void SentinelService::CheckAndUpdateGroupServerState(GroupServer* server, Replic
 }
 
 // 向 dashboard 发送 HTTP Post 请求变更 etcd 元信息
-static void UpdateGroup(Group* group) {
+static void HTTPUpdateGroup(Group* group) {
   nlohmann::json json_group = group;
-  curl_global_init(CURL_GLOBAL_ALL);
-  CURL* curl = curl_easy_init();
+  if (!curl) {
+    return;
+  }
   if (curl) {
     std::string response_string;
     std::string json_data = json_group.dump(4);
     curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.34.17:18080/topom/upload-meta-data");
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data.c_str());
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    CURLcode res = curl_easy_perform(curl);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
+    CURLcode res = curl_easy_perform(curl);
+    std::cout << "HTTP Update Post RES: " << response_string << std::endl;
     if (res != CURLE_OK) {
       std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
-    } else {
-      if (response_string.find("OK") != std::string::npos) {
-        std::cout << "POST request sent successfully and received 'ok' in the response." << std::endl;
-      } else {
-        std::cerr << response_string << std::endl;
-      }
-      std::cout << "POST request sent successfully." << std::endl;
     }
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
   }
-  curl_global_cleanup();
 }
 
 void SentinelService::UpdateSlaveOfflineGroups() {
   for (auto& group : slave_offline_groups_) {
     // 更新 group 中的 out_of_sync 值，向 dashboard 发送 HTTP Post 请求，变更 etcd 信息
     group->out_of_sync = true;
-    UpdateGroup(group);
+    HTTPUpdateGroup(group);
   }
 }
 
@@ -464,8 +458,10 @@ static void SelectNewMaster(Group* group, std::string& newMasterAddr, int& newMa
   }
   if (newMasterServer == nullptr) {
     newMasterAddr = "";
+    return;
   }
   // 用 newMasterAddr 存取新的主节点的 addr
+  std::cout << "Select newMasterAddr: " << newMasterAddr << std::endl;
   newMasterAddr = newMasterServer->addr;
 }
 
@@ -474,8 +470,9 @@ static bool DoSwitchGroupMaster(pikiwidb::Group *group, const std::string& newMa
     return true;
   }
   // 对新的主节点发送 slaveof no one 命令，并且变更其元信息
-  if (Slavenoone(newMasterAddr)) {
-    std::cerr << "promote serve " << newMasterAddr << "to new master failed" << std::endl;
+  std::cout << "newMasterAddr: " << newMasterAddr << std::endl;
+  if (!Slavenoone(newMasterAddr)) {
+    std::cerr << "promote server " << newMasterAddr << "to new master failed" << std::endl;
     return false;
   }
   group->servers[newMasterIndex]->role = GroupServerRoleStrings::Master;
@@ -485,7 +482,7 @@ static bool DoSwitchGroupMaster(pikiwidb::Group *group, const std::string& newMa
   // group 的 term-id 发生自增
   group->term_id++;
   // 向 dashboard 发送 HTTP Post 请求变更 etcd 元信息
-  UpdateGroup(group);
+  HTTPUpdateGroup(group);
   // 对剩余的从节点发送 slaveof 命令，变更到新的主节点上
   for (auto& server : group->servers) {
     if (server->state != static_cast<int8_t>(GroupState::GroupServerStateNormal) || server->addr == newMasterAddr) {
@@ -497,6 +494,7 @@ static bool DoSwitchGroupMaster(pikiwidb::Group *group, const std::string& newMa
       server->action.state = ActionState::SyncedFailed;
       server->state = static_cast<int8_t>(GroupState::GroupServerStateOffline);
     } else {
+      std::cout << server->addr << " slaveof " << newMasterAddr << " success!" << std::endl;
       server->action.state = ActionState::Synced;
       server->role = GroupServerRoleStrings::Slave;
     }
@@ -510,7 +508,7 @@ static bool TrySwitchGroupMaster(Group* group) {
   // 选取新的主节点
   SelectNewMaster(group, newMasterAddr, newMasterIndex);
   if (newMasterAddr.empty()) {
-    std::cerr <<  "group " << group->id << "don't has any slaves to switch master" << std::endl;
+    std::cerr <<  "group " << group->id << " don't has any slaves to switch master" << std::endl;
     return false;
   }
   // 切换新的主节点
@@ -521,10 +519,13 @@ void SentinelService::TrySwitchGroupsToNewMaster() {
   for (auto& group : master_offline_groups_) {
     group->out_of_sync = true;
     // 变更 group 的 out_of_sync 信息，向 dashboard 发送 HTTP Post 请求, 变更 etcd 元信息
-    UpdateGroup(group);
+    HTTPUpdateGroup(group);
+    std::cout << "Have to select new addr" << std::endl;
     if (!TrySwitchGroupMaster(group)) {
-      std::cerr << "group-" << group->id << "switch master failed" << std::endl;
+      std::cerr << "group-" << group->id << " switch master failed" << std::endl;
     }
+    group->out_of_sync = false;
+    HTTPUpdateGroup(group);
   }
 }
 
@@ -567,12 +568,12 @@ static bool TryFixReplicationRelationship(Group *group, GroupServer *server,
   server->state = static_cast<int8_t>(GroupState::GroupServerStateNormal);
   server->recall_times = 0;
   server->replica_group = true;
-  server->role = state->replication.role;
+  server->role = GroupServerRoleStrings::Slave;
   server->db_binlog_filenum = state->replication.db_binlog_filenum;
   server->db_binlog_offset = state->replication.db_binlog_offset;
   server->action.state = ActionState::Synced;
   // 向 dashboard 发送 HTTP Post 请求变更 etcd 元信息
-  UpdateGroup(group);
+  HTTPUpdateGroup(group);
   return true;
 }
 
@@ -584,10 +585,13 @@ void SentinelService::TryFixReplicationRelationships(size_t masterOfflineGroups)
     }
     group->out_of_sync = true;
     // 变更 group 的 out_of_sync 信息，向 dashboard 发送 HTTP Post 请求, 变更 etcd 元信息
-    UpdateGroup(group);
+    HTTPUpdateGroup(group);
     // 由于掉线节点在离线i期间可能有新的主从关系的变更，这里进行这部分的处理
-    if (TryFixReplicationRelationship(group, state->server, state, masterOfflineGroups)) {
-      std::cerr << "group-[" << group->id << "]fix serve[" << state->addr << "] replication relationship failed" << std::endl;
+    if (!TryFixReplicationRelationship(group, state->server, state, masterOfflineGroups)) {
+      std::cerr << "group-[" << group->id << "] fix server [" << state->addr << "] replication relationship failed" << std::endl;
+    } else {
+      group->out_of_sync = false;
+      HTTPUpdateGroup(group);
     }
   }
 }
@@ -611,7 +615,7 @@ void SentinelService::RefreshMastersAndSlavesClientWithPKPing() {
     group_info.term_id = groups_info[group.second->id];
     group_info.pika_sentinel_addr = pika_sentinel_addr_;
     for (auto &server: group.second->servers) {
-      if (server->role == GroupServerRoleStrings::Master) {
+      if (server->role == GroupServerRoleStrings::Master && server->state == static_cast<int8_t>(GroupState::GroupServerStateNormal)) {
         group_info.master_addr = server->addr;
       }
       if (server->role == GroupServerRoleStrings::Slave) {
@@ -637,6 +641,10 @@ void SentinelService::RefreshMastersAndSlavesClientWithPKPing() {
 
 void SentinelService::CheckMastersAndSlavesState() {
   // 探活发送 PkPing 命令
+  recovered_groups_.clear();
+  master_offline_groups_.clear();
+  slave_offline_groups_.clear();
+  states_.clear();
   RefreshMastersAndSlavesClientWithPKPing();
   // 对每一个节点的状态值进行遍历，查看是否存活
   for (auto& state : states_) {
@@ -665,12 +673,15 @@ void SentinelService::CheckMastersAndSlavesState() {
  */
 void SentinelService::Run() {
   // 启动 HTTP-Client
+  InitCurl();
   HTTPClient();
+  running_ = true;
   while (running_) {
     // 每 10 秒检查一次主从状态
     CheckMastersAndSlavesState();
     std::this_thread::sleep_for(std::chrono::seconds(10));
   }
+  CleanupCurl();
 }
 
 // PKPing 命令
@@ -702,7 +713,7 @@ void SentinelService::PKPingRedis(const std::string& addr, const nlohmann::json&
   net::RedisCmdArgsType argv;
   argv.emplace_back("pkping");
   argv.emplace_back(group_info);
-  std::cout << "GROUP-INFO: " << group_info << std::endl;
+  std::cout << "Group-info: " << group_info << std::endl;
   net::SerializeRedisCommand(argv, &cmd);
   send(sock, cmd.c_str(), cmd.size(), 0);
 
@@ -712,10 +723,11 @@ void SentinelService::PKPingRedis(const std::string& addr, const nlohmann::json&
     std::cerr << "Read reply failed" << std::endl;
     close(sock);
     state->err = true;
+    states_.emplace_back(state);
     return;
   }
   std::string reply_str(reply, reply_length);
-  std::cout << "pkping reply: " << reply_str << std::endl;
+  //std::cout << "pkping reply: " << reply_str << std::endl;
   close(sock);
   if (reply_str.find("Replication") != std::string::npos) {
     state->err = false;
@@ -723,22 +735,26 @@ void SentinelService::PKPingRedis(const std::string& addr, const nlohmann::json&
     state->err = true;
   }
   parseInfoReplication(reply_str, state->replication);
-  std::cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ PkPing ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
-  std::cout << "ERR: " << state->err << std::endl;
-  std::cout << "Index: " << state->index << std::endl;
-  std::cout << "Group-id: " << state->group_id << std::endl;
-  std::cout << "Addr: "  << state->addr << std::endl;
-  std::cout << "Role: " << state->replication.role << std::endl;
-  std::cout << "Connected Slaves: " << state->replication.connected_slaves << std::endl;
-  std::cout << "master_link_status: " << state->replication.master_link_status << std::endl;
-  std::cout << "DB Binlog Filenum: " << state->replication.db_binlog_filenum << std::endl;
-  std::cout << "DB Binlog Offset: " << state->replication.db_binlog_offset << std::endl;
-  for (const auto& slave : state->replication.slaves) {
-    std::cout << "Slave IP: " << slave.ip << std::endl;
-    std::cout << "Slave Port: " << slave.port << std::endl;
-    std::cout << "Slave Offset: " << slave.offset << std::endl;
-  }
-  std::cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
+  state->replication.role.pop_back();
+  state->replication.master_link_status.pop_back();
+//  std::cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ PkPing ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
+//  std::cout << "ERR: " << state->err << std::endl;
+//  std::cout << "Index: " << state->index << std::endl;
+//  std::cout << "Group-id: " << state->group_id << std::endl;
+//  std::cout << "Addr: "  << state->addr << std::endl;
+//  std::cout << "Role: " << state->replication.role << std::endl;
+//  std::cout << "Role.size(): " << state->replication.role.size() << std::endl;
+//  std::cout << "Connected Slaves: " << state->replication.connected_slaves << std::endl;
+//  std::cout << "master_link_status: " << state->replication.master_link_status << std::endl;
+//  std::cout << "master_link_status.size(): " << state->replication.master_link_status.size() << std::endl;
+//  std::cout << "DB Binlog Filenum: " << state->replication.db_binlog_filenum << std::endl;
+//  std::cout << "DB Binlog Offset: " << state->replication.db_binlog_offset << std::endl;
+//  for (const auto& slave : state->replication.slaves) {
+//    std::cout << "Slave IP: " << slave.ip << std::endl;
+//    std::cout << "Slave Port: " << slave.port << std::endl;
+//    std::cout << "Slave Offset: " << slave.offset << std::endl;
+//  }
+//  std::cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
   states_.emplace_back(state);
 }
 
@@ -783,7 +799,7 @@ static bool Slaveof(const std::string& addr, const std::string& newMasterAddr) {
   ssize_t reply_length = read(sock, reply, 1024);
   std::string reply_str(reply, reply_length);
   close(sock);
-  std::cout << "Slaveof reply: " << reply_str << std::endl;
+  std::cout << host << ":" << port << " Slaveof reply: " << reply_str << std::endl;
   bool success = false;
   success = reply_str.find("+OK") != std::string::npos;
   return success;
@@ -830,7 +846,9 @@ static bool Slavenoone(const std::string& addr) {
   close(sock);
   bool success = false;
   std::cout << "Slaveof noone reply: " << reply_str << std::endl;
-  success = reply_str.find("+OK") != std::string::npos;
+  if (reply_str.find("OK") != std::string::npos) {
+    success = true;
+  }
   return success;
 }
 
