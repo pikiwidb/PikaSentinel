@@ -165,6 +165,11 @@ bool LoadPikiwiDBConfig(const char* cfgFile, PConfig& cfg) {
   EraseQuotes(cfg.backendPath);
   cfg.backendHz = parser.GetData<int>("backendhz", 10);
 
+  // s3
+  cfg.s3EndpointOverride = parser.GetData<std::string>("s3-endpoint-override", cfg.s3EndpointOverride);
+  cfg.s3AccessKey = parser.GetData<std::string>("s3-access-key", cfg.s3AccessKey);
+  cfg.s3SecretKey = parser.GetData<std::string>("s3-secret-key", cfg.s3SecretKey);
+
   return cfg.CheckArgs();
 }
 

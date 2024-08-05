@@ -13,7 +13,6 @@ namespace pikiwidb {
 
 void CmdWorkThreadPoolWorker::Work() {
   while (running_) {
-     // INFO("bxbxbxbxbxb CmdWorkThreadPoolWorker running----------------111111");
     LoadWork();
     for (const auto &task : self_task_) {
       if (task->Client()->State() != ClientState::kOK) {  // the client is closed
@@ -30,12 +29,11 @@ void CmdWorkThreadPoolWorker::Work() {
         g_pikiwidb->PushWriteTask(task->Client());
         continue;
       }
-//bx todo
-      /*if (!cmdPtr->CheckArg(task->Client()->ParamsSize())) {
+      if (!cmdPtr->CheckArg(task->Client()->ParamsSize())) {
         task->Client()->SetRes(CmdRes::kWrongNum, task->CmdName());
         g_pikiwidb->PushWriteTask(task->Client());
         continue;
-      }*/
+      }
       task->Run(cmdPtr);
       g_pikiwidb->PushWriteTask(task->Client());
     }

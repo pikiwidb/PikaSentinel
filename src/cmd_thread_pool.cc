@@ -6,6 +6,7 @@
  */
 
 #include <iostream>
+
 #include "cmd_thread_pool.h"
 #include "cmd_thread_pool_worker.h"
 #include "log.h"
@@ -70,7 +71,7 @@ namespace pikiwidb {
         stopped_.store(true);
 
         for (auto &worker: workers_) {
-            // worker->Stop();
+             worker->Stop();
         }
 
         {

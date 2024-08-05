@@ -6,18 +6,16 @@
  */
 
 #include "base_cmd.h"
+
 #include "common.h"
-#include "config.h"
-#include "log.h"
 #include "pikiwidb.h"
 
 namespace pikiwidb {
 
-    BaseCmd::BaseCmd(std::string name, int16_t arity, uint32_t flag, uint32_t aclCategory) {
+    BaseCmd::BaseCmd(std::string name, int16_t arity, uint32_t flag) {
         name_ = std::move(name);
         arity_ = arity;
         flag_ = flag;
-        acl_category_ = aclCategory;
     }
 
     bool BaseCmd::CheckArg(size_t num) const {
@@ -38,7 +36,7 @@ namespace pikiwidb {
 
     BaseCmdGroup::BaseCmdGroup(const std::string &name, uint32_t flag) : BaseCmdGroup(name, -2, flag) {}
 
-    BaseCmdGroup::BaseCmdGroup(const std::string &name, int16_t arity, uint32_t flag) : BaseCmd(name, arity, flag, 0) {}
+    BaseCmdGroup::BaseCmdGroup(const std::string &name, int16_t arity, uint32_t flag) : BaseCmd(name, arity, flag) {}
 
     void BaseCmdGroup::AddSubCmd(std::unique_ptr<BaseCmd> cmd) { subCmds_[cmd->Name()] = std::move(cmd); }
 

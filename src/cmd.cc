@@ -5,7 +5,7 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#include "cmd_kv.h"
+#include "cmd.h"
 #include "pikiwidb.h"
 #include <iostream>
 #include <aws/core/auth/AWSCredentials.h>
@@ -14,6 +14,7 @@
 #include "aws/core/auth/AWSAuthSignerProvider.h"
 #include "aws/s3/model/PutObjectRequest.h"
 #include "nlohmann/json.hpp"
+#include "config.h"
 #include <openssl/evp.h>
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
@@ -71,51 +72,8 @@ namespace pikiwidb {
     return -1;
   }
 
-  bool uploadfile(const std::string &bucket_name, const std::string &bucket_path, const std::string &content) {
-    Aws::SDKOptions m_options;
-    Aws::S3::S3Client *m_client2 = {NULL};
-
-    Aws::InitAPI(m_options);
-    Aws::Client::ClientConfiguration cfg;
-    cfg.endpointOverride = "http://beijing2.xstore.qihoo.net";
-    cfg.scheme = Aws::Http::Scheme::HTTP;
-    cfg.verifySSL = false;
-    Aws::Auth::AWSCredentials cred("YHDIJ1LCITN7YHLETHLW", "fR5b2hEOzeogmiR01FzvYpb9BNt8eSrt0crHy510");
-
-    char *output = NULL;
-    int out_len = 0;
-    base64_decode(content, &output, &out_len) ;
-
-    auto m_client = Aws::S3::S3Client(cred, nullptr, cfg);
-    Aws::S3::Model::PutObjectRequest putObjectRequest;
-    putObjectRequest.SetBucket(Aws::String(bucket_name));
-    putObjectRequest.SetKey(Aws::String(bucket_path));
-
-    const std::shared_ptr<Aws::IOStream> inputData =
-            Aws::MakeShared<Aws::StringStream>("");
-    inputData->write(output, out_len);
-    putObjectRequest.SetBody(inputData);
-
-    auto putObjectResult = m_client.PutObject(putObjectRequest);
-    if (putObjectResult.IsSuccess()) {
-      std::cout << "Done!" << std::endl;
-      return true;
-    } else {
-      std::cout << "PutObject error: " <<
-                putObjectResult.GetError().GetExceptionName() << " " <<
-                putObjectResult.GetError().GetMessage() << std::endl;
-      return false;
-    }
-    /*    if (m_client != nullptr)
-        {
-            delete m_client;
-            m_client = NULL;
-        }*/
-    Aws::ShutdownAPI(m_options);
-  }
-
   UpLoadMetaCmd::UpLoadMetaCmd(const std::string &name, int16_t arity)
-          : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
+          : BaseCmd(name, arity, kCmdFlagsReadonly) {}
 
   bool UpLoadMetaCmd::DoInitial(PClient *client) {
     return true;
@@ -145,14 +103,46 @@ namespace pikiwidb {
           client->SetRes(CmdRes::kErrOther, "Term-ids are not equal");
           return;
         }
-        uploadfile(json.at("s3_bucket"), json.at("s3_path"), json.at("content"));
-        client->SetRes(CmdRes::kOK);
+
+        Aws::SDKOptions m_options;
+        Aws::InitAPI(m_options);
+        Aws::Client::ClientConfiguration cfg;
+
+        cfg.scheme = Aws::Http::Scheme::HTTP;
+        cfg.verifySSL = false;
+        cfg.endpointOverride =  pikiwidb::g_config.s3EndpointOverride;
+        Aws::Auth::AWSCredentials cred(pikiwidb::g_config.s3AccessKey, pikiwidb::g_config.s3SecretKey);
+        char *output = NULL;
+        int out_len = 0;
+        base64_decode(json.at("content"), &output, &out_len) ;
+
+        auto m_client = Aws::S3::S3Client(cred, nullptr, cfg);
+        Aws::S3::Model::PutObjectRequest putObjectRequest;
+        putObjectRequest.SetBucket(Aws::String(json.at("s3_bucket")));
+        putObjectRequest.SetKey(Aws::String(json.at("s3_path")));
+
+        const std::shared_ptr<Aws::IOStream> inputData =
+                Aws::MakeShared<Aws::StringStream>("");
+        inputData->write(output, out_len);
+        putObjectRequest.SetBody(inputData);
+
+        auto putObjectResult = m_client.PutObject(putObjectRequest);
+        if (putObjectResult.IsSuccess()) {
+            client->SetRes(CmdRes::kOK);
+            Aws::ShutdownAPI(m_options);
+            return;
+        } else {
+            client->SetRes(CmdRes::kErrOther, putObjectResult.GetError().GetExceptionName() + " "
+            + putObjectResult.GetError().GetMessage());
+            Aws::ShutdownAPI(m_options);
+            return;
+        }
     }
     client->SetRes(CmdRes::kErrOther, "Err json");
   }
 
   UpdateGroupCmd::UpdateGroupCmd(const std::string &name, int16_t arity)
-          : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
+          : BaseCmd(name, arity, kCmdFlagsReadonly) {}
 
   bool UpdateGroupCmd::DoInitial(PClient *client) {
     return true;
@@ -169,7 +159,7 @@ namespace pikiwidb {
   }
 
   DelGroupCmd::DelGroupCmd(const std::string &name, int16_t arity)
-          : BaseCmd(name, arity, kCmdFlagsReadonly, kAclCategoryRead | kAclCategoryString) {}
+          : BaseCmd(name, arity, kCmdFlagsReadonly) {}
 
   bool DelGroupCmd::DoInitial(PClient *client) {
     return true;

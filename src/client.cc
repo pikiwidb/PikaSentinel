@@ -128,59 +128,25 @@ namespace pikiwidb {
                 tcp_connection_->ActiveClose();
                 return 0;
             }
-
-            // try inline command
-            /* std::vector<std::string> params;
-             auto len = processInlineCmd(ptr, bytes, params);
-             if (len == 0) {
-               return 0;
-             }
-
-             ptr += len;
-             parser_.SetParams(params);
-             parseRet = PParseResult::ok;*/
         } else if (parseRet != PParseResult::ok) {
             return static_cast<int>(ptr - start);
         }
 
         DEFER { reset(); };
 
-        // handle packet
-        const auto &params = parser_.GetParams();
-        if (params.empty()) {
-            FeedMonitors(params_);
+        params_ = parser_.GetParams();
+        if (params_.empty()) {
             return static_cast<int>(ptr - start);
         }
-        argv_ = params;
-        std::string cmd(params[0]);
-        std::transform(params[0].begin(), params[0].end(), cmd.begin(), ::tolower);
-        cmdName_ = cmd;
+
+        argv_ = params_;
+        cmdName_ = params_[0];
         pstd::StringToLower(cmdName_);
 
-        /*if (!auth_) {
-          if (cmd == "auth") {
-            auto now = ::time(nullptr);
-            if (now <= last_auth_ + 1) {
-              // avoid guess password.
-              tcp_connection_->ActiveClose();
-              return 0;
-            } else {
-              last_auth_ = now;
-            }
-          } else {
-            ReplyError(PError_needAuth, &reply_);
-            return static_cast<int>(ptr - start);
-          }
-        }*/
+        DEBUG("client {}, cmd {}", tcp_connection_->GetUniqueId(), cmdName_);
 
-        DEBUG("client {}, cmd {}", tcp_connection_->GetUniqueId(), cmd);
-
-        FeedMonitors(params);
-
-        // check readonly slave and execute command
-
+        FeedMonitors(params_);
         g_pikiwidb->SubmitFast(std::make_shared<CmdThreadPoolTask>(shared_from_this()));
-        //if (cmd=="") handlePacketNew(obj, params, cmd);
 
         return static_cast<int>(ptr - start);
     }
@@ -203,9 +169,6 @@ namespace pikiwidb {
 
             total += processed;
         }
-
-        //obj->SendPacket(reply_.ReadAddr(), reply_.ReadableSize());
-        //reply_.Clear();
         return total;
     }
 

@@ -4,13 +4,13 @@
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
  */
+#include "slow_log.h"
 
 #include <sys/time.h>
-#include <fstream>
 #include <sstream>
 
 #include "log.h"
-#include "slow_log.h"
+
 
 namespace pikiwidb {
 

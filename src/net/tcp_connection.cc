@@ -114,22 +114,8 @@ namespace pikiwidb {
             return true;
         }
 
-        // if (loop_->InThisLoop()) {
         auto output = bufferevent_get_output(bev_);
         evbuffer_add(output, data, size);
-        /* } else {
-           auto w_obj(weak_from_this());
-           loop_->Execute([w_obj, data, size]() {
-             auto c = w_obj.lock();
-             if (!c) {
-               return;  // connection already lost
-             }
-
-             auto tcp_conn = std::static_pointer_cast<TcpConnection>(c);
-             auto output = bufferevent_get_output(tcp_conn->bev_);
-             evbuffer_add(output, data, size);
-           });
-         }*/
         return true;
     }
 
@@ -321,7 +307,6 @@ namespace pikiwidb {
                 return;
 
             case State::kConnected:
-                //todo bx
                 if (events & (BEV_EVENT_EOF | BEV_EVENT_ERROR)) {
                     me->HandleDisconnect();
                 }
