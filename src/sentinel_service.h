@@ -123,13 +123,13 @@ class SentinelService {
 
   std::atomic<bool> running_;
   std::thread thread_;
-  std::unordered_map<int, Group*> groups_; // 保存所有节点的元信息
-  std::vector<Group*> slave_offline_groups_; // 保存离线从节点的元信息
-  std::vector<Group*> master_offline_groups_; // 保存离线主节点的元信息
-  std::vector<ReplicationState*> recovered_groups_; // 保存重新上线节点的元信息
-  std::vector<ReplicationState*> states_; // 保存 pkping 命令状态值的返回信息
-  std::mutex groups_mtx_; // 用来保护 groups_ 的锁
-  std::string pika_sentinel_addr_ = "127.0.0.1:9286";
+  std::unordered_map<int, Group*> groups_; // Save the meta information of all nodes
+  std::vector<Group*> slave_offline_groups_; // Save the metadata of the offline slave node
+  std::vector<Group*> master_offline_groups_; // Save the meta information about the offline primary node
+  std::vector<ReplicationState*> recovered_groups_; // Save the meta information about the node that goes online again
+  std::vector<ReplicationState*> states_; // Save the return information about the status value of the pkping command
+  std::mutex groups_mtx_; // A lock used to protect groups
+  std::string pika_sentinel_addr_;
 };
 
 }  // namespace pikiwidb
