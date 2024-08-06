@@ -74,7 +74,7 @@ struct PConfig {
   int backend;  // enum BackEndType
   std::string backendPath;
   int backendHz;  // the frequency of dump to backend
-
+  std::string codis_dashboard_addr;
   PConfig();
 
   [[nodiscard]] bool CheckArgs() const;

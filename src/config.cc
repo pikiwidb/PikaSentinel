@@ -66,6 +66,7 @@ PConfig::PConfig() {
   backend = BackEndNone;
   backendPath = "dump";
   backendHz = 10;
+  //codis_dashboard_addr = "http://10.17.34.17:18080";
 }
 
 bool LoadPikiwiDBConfig(const char* cfgFile, PConfig& cfg) {
@@ -164,7 +165,7 @@ bool LoadPikiwiDBConfig(const char* cfgFile, PConfig& cfg) {
   cfg.backendPath = parser.GetData<std::string>("backendpath", cfg.backendPath);
   EraseQuotes(cfg.backendPath);
   cfg.backendHz = parser.GetData<int>("backendhz", 10);
-
+  cfg.codis_dashboard_addr = parser.GetData<std::string>("codis-dashboard-addr", cfg.codis_dashboard_addr);
   return cfg.CheckArgs();
 }
 

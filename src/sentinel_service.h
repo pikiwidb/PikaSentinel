@@ -129,8 +129,7 @@ class SentinelService {
   std::vector<ReplicationState*> recovered_groups_; // Save the meta information about the node that goes online again
   std::vector<ReplicationState*> states_; // Save the return information about the status value of the pkping command
   std::mutex groups_mtx_; // A lock used to protect groups
-
-  std::string pika_sentinel_addr_ = "127.0.0.1:9286";
+  std::string pika_sentinel_addr_;
 };
 
 }  // namespace pikiwidb

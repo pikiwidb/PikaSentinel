@@ -1,14 +1,19 @@
 #include "sentinel_service.h"
 #include "log.h"
+#include "config.h"
 #include <iostream>
 #include <cstring>
 #include <net/redis_cli.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <unistd.h>
 #include <nlohmann/json.hpp>
 #include <curl/curl.h>
 
+extern pikiwidb::PConfig g_config;
 using json = nlohmann::json;
 namespace pikiwidb {
 
@@ -24,6 +29,21 @@ SentinelService::~SentinelService() {
 }
 
 void SentinelService::Start() {
+  struct ifaddrs *addrs, *addr;
+  if (getifaddrs(&addrs) == -1) {
+    perror("getifaddrs");
+  }
+  addr = addrs;
+  while (addr) {
+    if (addr->ifa_addr && addr->ifa_addr->sa_family == AF_INET && std::strcmp(addr->ifa_name, "en0") == 0) {
+      struct sockaddr_in *pAddr = (struct sockaddr_in *)addr->ifa_addr;
+      pika_sentinel_addr_ = inet_ntoa(pAddr->sin_addr);
+      pika_sentinel_addr_ = pika_sentinel_addr_ + ":" + std::to_string(g_config.port);
+      break;
+    }
+    addr = addr->ifa_next;
+  }
+  freeifaddrs(addrs);
   running_ = true;
   thread_ = std::thread(&SentinelService::Run, this);
 }
@@ -294,7 +314,8 @@ void SentinelService::HTTPClient() {
   std::string readBuffer;
   std::lock_guard<std::mutex> lock(groups_mtx_);
   if (curl) {
-    curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.34.17:18080/topom/load-meta-data");
+    std::string url = g_config.codis_dashboard_addr +  "/topom/load-meta-data";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
 
@@ -386,7 +407,8 @@ static void HTTPUpdateGroup(Group* group) {
   if (curl) {
     std::string response_string;
     std::string json_data = json_group.dump(4);
-    curl_easy_setopt(curl, CURLOPT_URL, "http://10.17.34.17:18080/topom/upload-meta-data");
+    std::string url = g_config.codis_dashboard_addr + "/topom/upload-meta-data";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data.c_str());
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
