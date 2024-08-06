@@ -9,6 +9,7 @@
 
 #include <deque>
 #include <vector>
+#include <string>
 
 class Logger;
 
