@@ -29,21 +29,7 @@ SentinelService::~SentinelService() {
 }
 
 void SentinelService::Start() {
-  struct ifaddrs *addrs, *addr;
-  if (getifaddrs(&addrs) == -1) {
-    WARN("getifaddrs failed: {}", strerror(errno));
-  }
-  addr = addrs;
-  while (addr) {
-    if (addr->ifa_addr && addr->ifa_addr->sa_family == AF_INET && std::strcmp(addr->ifa_name, "en0") == 0) {
-      struct sockaddr_in *pAddr = (struct sockaddr_in *)addr->ifa_addr;
-      pika_sentinel_addr_ = inet_ntoa(pAddr->sin_addr);
-      pika_sentinel_addr_ = pika_sentinel_addr_ + ":" + std::to_string(g_config.port);
-      break;
-    }
-    addr = addr->ifa_next;
-  }
-  freeifaddrs(addrs);
+  pika_sentinel_addr_ = std::format("{}:{}", g_config.ip, g_config.port);
   running_ = true;
   thread_ = std::thread(&SentinelService::Run, this);
 }
