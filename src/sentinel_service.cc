@@ -31,7 +31,7 @@ SentinelService::~SentinelService() {
 void SentinelService::Start() {
   struct ifaddrs *addrs, *addr;
   if (getifaddrs(&addrs) == -1) {
-    perror("getifaddrs");
+    WARN("getifaddrs failed: {}", strerror(errno));
   }
   addr = addrs;
   while (addr) {
