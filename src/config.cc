@@ -66,7 +66,6 @@ PConfig::PConfig() {
   backend = BackEndNone;
   backendPath = "dump";
   backendHz = 10;
-  //codis_dashboard_addr = "http://10.17.34.17:18080";
 }
 
 bool LoadPikiwiDBConfig(const char* cfgFile, PConfig& cfg) {
