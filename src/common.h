@@ -243,5 +243,3 @@ class ExecuteOnScopeExit {
 bool NotGlobRegex(const char* pattern, std::size_t plen);
 
 }  // namespace pikiwidb
-
-int64_t Now();

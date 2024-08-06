@@ -5,8 +5,6 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-//
-//  PikiwiDB.cc
 #include "pikiwidb.h"
 
 #include <spawn.h>
@@ -64,10 +62,6 @@ bool PikiwiDB::ParseArgs(int ac, char* av[]) {
         return false;
       }
       log_level_ = std::string(av[i]);
-    } else if (strncasecmp(av[i], "--slaveof", 9) == 0) {
-      if (i + 2 >= ac) {
-        return false;
-      }
     } else {
       std::cerr << "Unknow option " << av[i] << std::endl;
       return false;

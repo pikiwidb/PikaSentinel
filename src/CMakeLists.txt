@@ -15,9 +15,9 @@ include_directories(${OPENSSL_INCLUDE_DIR})
 ADD_EXECUTABLE(pikiwidb ${PIKIWIDB_SRC}
         cmd_thread_pool.cc
         base_cmd.cc
-        cmd_kv.h
-        cmd_kv.cc
-        cmd_kv.cc
+        cmd.h
+        cmd.cc
+        cmd.cc
         cmd_thread_pool_worker.h
         cmd_thread_pool_worker.cc
         cmd_table_manager.cc)

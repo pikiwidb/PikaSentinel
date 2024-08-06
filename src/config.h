@@ -75,6 +75,12 @@ struct PConfig {
   std::string backendPath;
   int backendHz;  // the frequency of dump to backend
   std::string codis_dashboard_addr;
+
+  // S3
+  std::string s3EndpointOverride;
+  std::string s3AccessKey;
+  std::string s3SecretKey;
+
   PConfig();
 
   [[nodiscard]] bool CheckArgs() const;

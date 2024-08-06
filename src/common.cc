@@ -6,9 +6,9 @@
  */
 
 #include "common.h"
+
 #include <algorithm>
 #include <cerrno>
-#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -384,9 +384,3 @@ bool NotGlobRegex(const char* pattern, std::size_t plen) {
 }
 
 }  // namespace pikiwidb
-
-int64_t Now() {
-  using namespace std::chrono;
-  auto now = system_clock::now();
-  return duration_cast<milliseconds>(now.time_since_epoch()).count();
-}

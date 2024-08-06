@@ -10,7 +10,7 @@
 #include <memory>
 
 
-#include "cmd_kv.h"
+#include "cmd.h"
 namespace pikiwidb {
 
 #define ADD_COMMAND(cmd, argc)                                                      \
@@ -40,7 +40,6 @@ CmdTableManager::CmdTableManager() {
 
 void CmdTableManager::InitCmdTable() {
   std::unique_lock wl(mutex_);
-  // kv
   ADD_COMMAND(UpLoadMeta, 2);
   ADD_COMMAND(DelGroup, 2);
   ADD_COMMAND(UpdateGroup, 2);
@@ -54,19 +53,7 @@ std::pair<BaseCmd*, CmdRes::CmdRet> CmdTableManager::GetCommand(const std::strin
     return std::pair(nullptr, CmdRes::kSyntaxErr);
   }
 
-  /*if (cmd->second->HasSubCommand()) {
-    if (client->argv_.size() < 2) {
-      return std::pair(nullptr, CmdRes::kInvalidParameter);
-    }
-    return std::pair(cmd->second->GetSubCmd(client->argv_[1]), CmdRes::kSyntaxErr);
-  }*/
   return std::pair(cmd->second.get(), CmdRes::kSyntaxErr);
 }
 
-bool CmdTableManager::CmdExist(const std::string& cmd) const {
-  std::shared_lock rl(mutex_);
-  return cmds_->find(cmd) != cmds_->end();
-}
-
-uint32_t CmdTableManager::GetCmdId() { return ++cmdId_; }
 }  // namespace pikiwidb
