@@ -112,9 +112,14 @@ namespace pikiwidb {
         cfg.verifySSL = false;
         cfg.endpointOverride =  pikiwidb::g_config.s3EndpointOverride;
         Aws::Auth::AWSCredentials cred(pikiwidb::g_config.s3AccessKey, pikiwidb::g_config.s3SecretKey);
+
         char *output = NULL;
         int out_len = 0;
-        base64_decode(json.at("content"), &output, &out_len) ;
+        if (base64_decode(json.at("content"), &output, &out_len) != 0) {
+            client->SetRes(CmdRes::kErrOther, "Base64 decoding failed");
+            Aws::ShutdownAPI(m_options);
+            return;
+        }
 
         auto m_client = Aws::S3::S3Client(cred, nullptr, cfg);
         Aws::S3::Model::PutObjectRequest putObjectRequest;

@@ -167,9 +167,20 @@ bool LoadPikiwiDBConfig(const char* cfgFile, PConfig& cfg) {
 
   // s3
   cfg.s3EndpointOverride = parser.GetData<std::string>("s3-endpoint-override", cfg.s3EndpointOverride);
+  if (cfg.s3EndpointOverride.empty()) {
+      std::cerr << "s3-endpoint-override is required" << std::endl;
+      return false;
+  }
   cfg.s3AccessKey = parser.GetData<std::string>("s3-access-key", cfg.s3AccessKey);
+  if (cfg.s3AccessKey.empty()) {
+      std::cerr << "s3-access-key is required" << std::endl;
+      return false;
+  }
   cfg.s3SecretKey = parser.GetData<std::string>("s3-secret-key", cfg.s3SecretKey);
-
+  if (cfg.s3SecretKey.empty()) {
+      std::cerr << "s3-secret-key is required" << std::endl;
+      return false;
+  }
   return cfg.CheckArgs();
 }
 
